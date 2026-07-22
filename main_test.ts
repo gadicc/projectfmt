@@ -142,7 +142,7 @@ describe("resolveFormatter", () => {
     }
   });
 
-  it("detects a Deno formatter task as project evidence", async () => {
+  it("detects Deno formatter configuration as project evidence", async () => {
     const resolution = await resolveFormatter({
       filePath: "src/generated/root.ts",
       projectRoot: root,
@@ -150,7 +150,7 @@ describe("resolveFormatter", () => {
     assertEquals(resolution.formatter, "deno");
     assert(
       resolution.evidence.some((item) =>
-        item.formatter === "deno" && item.kind === "script"
+        item.formatter === "deno" && item.kind === "config"
       ),
     );
   });

@@ -21,6 +21,9 @@
     "test:packages": "deno task test:jsr && deno task build:npm && deno task test:npm",
     "typecheck": "deno check main.ts"
   },
+  "fmt": {
+    "exclude": [".agents"]
+  },
   "imports": {
     "@deno/dnt": "jsr:@deno/dnt@^0.42.3",
     "@sebbo2002/semantic-release-jsr": "npm:@sebbo2002/semantic-release-jsr@^4.0.0",
