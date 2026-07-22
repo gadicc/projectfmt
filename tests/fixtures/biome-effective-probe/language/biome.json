@@ -1,0 +1,5 @@
+{
+  "formatter": { "enabled": true },
+  "javascript": { "formatter": { "quoteStyle": "single" } },
+  "css": { "formatter": { "enabled": false } }
+}

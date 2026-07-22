@@ -1,0 +1,12 @@
+{
+  "formatter": { "enabled": true },
+  "linter": { "enabled": true },
+  "assist": { "enabled": true },
+  "overrides": [
+    {
+      "includes": ["src/special/**"],
+      "formatter": { "enabled": false },
+      "assist": { "enabled": false }
+    }
+  ]
+}

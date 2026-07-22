@@ -1,0 +1,4 @@
+{
+  "extends": ["../base/base.json"],
+  "linter": { "enabled": true }
+}

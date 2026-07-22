@@ -1,0 +1,11 @@
+{
+  "formatter": { "enabled": true, "includes": ["**", "!src/lint-only/**"] },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "style": { "noInferrableTypes": "on" }
+    }
+  },
+  "assist": { "enabled": true, "includes": ["**", "!src/lint-only/**"] }
+}

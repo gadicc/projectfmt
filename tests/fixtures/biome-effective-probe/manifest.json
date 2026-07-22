@@ -1,0 +1,38 @@
+[
+  {
+    "id": "extends",
+    "config": "extends/biome.json",
+    "filePath": "extends/src/value.ts",
+    "source": "let value: number=1;console.log(value)"
+  },
+  {
+    "id": "override",
+    "config": "override/biome.json",
+    "filePath": "override/src/special/value.ts",
+    "source": "let value: number=1;console.log(value)"
+  },
+  {
+    "id": "language",
+    "config": "language/biome.json",
+    "filePath": "language/src/value.ts",
+    "source": "const value=\"configured\""
+  },
+  {
+    "id": "force-ignore",
+    "config": "force-ignore/biome.json",
+    "filePath": "force-ignore/src/ignored/keep.ts",
+    "source": "const value=1"
+  },
+  {
+    "id": "lint-only",
+    "config": "lint-only/biome.json",
+    "filePath": "lint-only/src/lint-only/rule.ts",
+    "source": "let     value: number=1;console.log(value)"
+  },
+  {
+    "id": "empty-success",
+    "config": "empty/biome.json",
+    "filePath": "empty/src/blank.ts",
+    "source": ""
+  }
+]

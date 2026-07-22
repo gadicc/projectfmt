@@ -21,7 +21,7 @@ they do not authorize production feature delivery.
 | [004](004-correct-biome-lifecycle.md)           | Make Biome lifecycle outcomes truthful             | P1       | M      | 003                     | DONE   |
 | [005](005-match-deno-virtual-file-semantics.md) | Match Deno virtual-file semantics                  | P1       | M      | 002, 003                | DONE   |
 | [006](006-align-config-discovery.md)            | Align configuration discovery and precedence       | P1       | M      | 001, 002                | DONE   |
-| [007](007-use-effective-biome-config.md)        | Characterize authoritative Biome tool activation   | P1       | M      | 002, 004, 006           | TODO   |
+| [007](007-use-effective-biome-config.md)        | Characterize authoritative Biome tool activation   | P1       | M      | 002, 004, 006           | DONE   |
 | [008](008-fix-deno-import-docs.md)              | Show runtime-correct Deno imports                  | P1       | S      | —                       | TODO   |
 | [009](009-pin-github-actions.md)                | Pin privileged GitHub Actions immutably            | P1       | S      | —                       | TODO   |
 | [010](010-test-npm-modes-and-supported-node.md) | Test npm loading modes and supported Node releases | P2       | M      | 003, 006, 009           | TODO   |

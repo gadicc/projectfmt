@@ -1,0 +1,5 @@
+{
+  "files": {
+    "includes": ["**", "!!src/ignored/**", "!src/ignored/keep.ts"]
+  }
+}
