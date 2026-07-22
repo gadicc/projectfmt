@@ -1,5 +1,7 @@
 import { arch, platform } from "node:process";
-import { dirname, relative, sep } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, sep } from "node:path";
 
 import { parseJsonc, readTextIfPresent } from "../fs.ts";
 import { isIncluded } from "../glob.ts";
@@ -51,44 +53,84 @@ export const biomeAdapter: FormatterAdapter = {
     if (!implementation) {
       throw new Error("Could not resolve a project-local @biomejs/biome CLI");
     }
-    const fileBehavior = await biomeFileBehavior(context);
-    if (fileBehavior.ignored) return { source, ignored: true };
-    if (!context.formatOnly && fileBehavior.formatterActive) {
-      // Biome's stdin check --write currently succeeds silently on parse
-      // errors. Validate in memory first, but let check process the original
-      // source so its fix/format ordering remains authoritative.
-      await runBiome(
+    return await withBiomeConfig(context.configPath, async (configPath) => {
+      const fileBehavior = await biomeFileBehavior(context);
+      if (fileBehavior.ignored) return { source, ignored: true };
+      if (!context.formatOnly && fileBehavior.formatterActive) {
+        // Biome's stdin check --write currently succeeds silently on parse
+        // errors. Validate in memory first, but let check process the original
+        // source so its fix/format ordering remains authoritative.
+        await runBiome(
+          implementation,
+          ["format", "--stdin-file-path", context.filePath],
+          configPath,
+          context,
+          source,
+        );
+      }
+      const args = context.formatOnly
+        ? ["format", "--stdin-file-path", context.filePath]
+        : [
+          "check",
+          "--write",
+          ...fileBehavior.disabledChecks,
+          "--stdin-file-path",
+          context.filePath,
+        ];
+      const result = await runBiome(
         implementation,
-        ["format", "--stdin-file-path", context.filePath],
+        args,
+        configPath,
         context,
         source,
       );
-    }
-    const args = context.formatOnly
-      ? ["format", "--stdin-file-path", context.filePath]
-      : [
-        "check",
-        "--write",
-        ...fileBehavior.disabledChecks,
-        "--stdin-file-path",
-        context.filePath,
-      ];
-    const result = await runBiome(implementation, args, context, source);
-    return {
-      source: result.stdout || source,
-      ignored: isIgnoredMessage(result.stderr),
-      stderr: result.stderr || undefined,
-    };
+      return {
+        source: result.stdout || source,
+        ignored: isIgnoredMessage(result.stderr),
+        stderr: result.stderr || undefined,
+      };
+    });
   },
 };
+
+const generatedConfigPrefix = "projectfmt-biome-";
+
+async function withBiomeConfig<T>(
+  configPath: string | undefined,
+  callback: (configPath: string) => Promise<T>,
+): Promise<T> {
+  return configPath
+    ? await callback(configPath)
+    : await withGeneratedBiomeConfig(callback);
+}
+
+/** @internal Test seam for the configless Biome cleanup lifecycle. */
+export async function withGeneratedBiomeConfig<T>(
+  callback: (configPath: string) => Promise<T>,
+): Promise<T> {
+  const directory = await mkdtemp(join(tmpdir(), generatedConfigPrefix));
+  const configPath = join(directory, "biome.json");
+  try {
+    await writeFile(configPath, "{}\n", "utf8");
+    return await callback(configPath);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 
 async function runBiome(
   implementation: string,
   args: readonly string[],
+  configPath: string,
   context: AdapterContext,
   input: string,
 ) {
-  const result = await runCommand(implementation, args, {
+  const result = await runCommand(implementation, [
+    ...args,
+    "--config-path",
+    configPath,
+    "--use-editorconfig=false",
+  ], {
     cwd: context.configRoot,
     input,
   });
@@ -162,9 +204,7 @@ async function biomeFileBehavior(
   formatterActive: boolean;
   disabledChecks: string[];
 }> {
-  const configPath = context.evidence.find((item) =>
-    item.formatter === "biome" && item.kind === "config"
-  )?.path;
+  const configPath = context.configPath;
   if (!configPath) {
     return { ignored: false, formatterActive: true, disabledChecks: [] };
   }

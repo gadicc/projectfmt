@@ -379,6 +379,11 @@ async function finalize(options: {
     filePath: options.filePath,
     projectRoot: options.projectRoot,
     configRoot: options.configRoot,
+    configPath: selectedConfigPath(
+      options.adapter.name,
+      options.configRoot,
+      options.evidence,
+    ),
     evidence: options.evidence,
   };
   const availability = await options.adapter.probe(context);
@@ -413,7 +418,24 @@ function adapterContext(
     filePath: resolution.filePath,
     projectRoot: resolution.projectRoot,
     configRoot: resolution.configRoot!,
+    configPath: selectedConfigPath(
+      resolution.formatter!,
+      resolution.configRoot!,
+      resolution.evidence,
+    ),
     evidence: resolution.evidence,
     formatOnly: options.formatOnly,
   };
+}
+
+function selectedConfigPath(
+  formatter: string,
+  configRoot: string,
+  evidence: readonly DiscoveryEvidence[],
+): string | undefined {
+  return evidence.find((item) =>
+    item.formatter === formatter && dirname(item.path) === configRoot &&
+    (item.kind === "config" ||
+      (formatter === "prettier" && item.kind === "package-key"))
+  )?.path;
 }

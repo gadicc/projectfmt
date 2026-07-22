@@ -276,14 +276,15 @@ unchanged in either mode.
 
 ## Formatter behavior
 
-| Formatter | Implementation                    | Project/path behavior                                                                                                                                                                       | Deno | Node                        |
-| --------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------- |
-| Prettier  | Project-local JS API              | Passes `filepath`, resolves nearest config and EditorConfig, loads project plugins, checks `.prettierignore`/`.gitignore`                                                                   | Yes  | Yes                         |
-| Biome     | Project-local platform CLI binary | Runs `check --write --stdin-file-path` by default; uses repository formatting, safe lint rules, assists, and file/tool includes. `formatOnly` selects `format` and formatter includes only. | Yes  | Yes                         |
-| Deno fmt  | `deno fmt` subprocess             | Passes the nearest config, infers `--ext` from the intended path, honors `fmt.include`/`fmt.exclude`, and uses the nearest existing destination directory as cwd                            | Yes  | Yes, when Deno is installed |
+| Formatter | Implementation                    | Project/path behavior                                                                                                                                                                                               | Deno | Node                        |
+| --------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------- |
+| Prettier  | Project-local JS API              | Passes `filepath`, loads the exact discovered config and project plugins, and checks bounded `.prettierignore`/`.gitignore` paths. EditorConfig lookup is disabled.                                                 | Yes  | Yes                         |
+| Biome     | Project-local platform CLI binary | Runs `check --write --stdin-file-path` by default with the exact discovered config, safe lint rules, assists, and file/tool includes. `formatOnly` selects `format`. Configless calls use a temporary empty config. | Yes  | Yes                         |
+| Deno fmt  | `deno fmt` subprocess             | Passes the exact discovered config or `--no-config`, infers `--ext`, honors `fmt.include`/`fmt.exclude`, and uses the nearest existing destination directory as cwd. EditorConfig lookup is disabled.               | Yes  | Yes, when Deno is installed |
 
-No temporary file is required by any adapter. Paths containing spaces are passed
-as process arguments rather than shell strings.
+No adapter creates a temporary source or destination file. Configless Biome
+calls create and unconditionally remove a temporary empty configuration. Paths
+containing spaces are passed as process arguments rather than shell strings.
 
 ## Errors and diagnostics
 
@@ -306,6 +307,10 @@ the Deno adapter executes the `deno` binary on `PATH`. This is the same broad
 trust boundary as running those project formatters directly. `projectRoot` is a
 discovery and module-resolution boundary, not a sandbox. Provide it explicitly
 when automatic inference would grant a broader boundary than the caller intends.
+Native formatter configuration search is also bounded: projectfmt passes only
+the exact configuration discovered within `projectRoot`, or explicitly disables
+native auto-discovery. EditorConfig lookup is disabled for all built-in adapters
+because bounded EditorConfig inheritance is not yet implemented.
 
 The library itself performs no network access or installation. Deno callers must
 grant the filesystem, environment, and subprocess permissions required to

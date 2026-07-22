@@ -6,7 +6,9 @@ import {
   assertStringIncludes,
 } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
-import { join, parse } from "node:path";
+import { cp, mkdir, realpath } from "node:fs/promises";
+import { isAbsolute, join, parse, relative, sep } from "node:path";
+import { arch, platform } from "node:process";
 
 import {
   clearProjectRootCache,
@@ -21,6 +23,47 @@ import {
 const root = Deno.cwd();
 const fixture = (...parts: string[]) =>
   join(root, "tests", "fixtures", ...parts);
+
+async function copyPackageIntoProject(
+  packageName: string,
+  projectRoot: string,
+): Promise<string> {
+  const source = await realpath(
+    join(root, "node_modules", ...packageName.split("/")),
+  );
+  return await copyPackageDirectory(source, packageName, projectRoot);
+}
+
+async function copyPackageDirectory(
+  source: string,
+  packageName: string,
+  projectRoot: string,
+): Promise<string> {
+  const destination = join(
+    projectRoot,
+    "node_modules",
+    ...packageName.split("/"),
+  );
+  await mkdir(join(destination, ".."), { recursive: true });
+  await cp(source, destination, { recursive: true, dereference: true });
+  return destination;
+}
+
+function biomeCliPackage(): { name: string; executable: string } {
+  const names: Record<string, Partial<Record<string, string>>> = {
+    darwin: { arm64: "cli-darwin-arm64", x64: "cli-darwin-x64" },
+    linux: { arm64: "cli-linux-arm64", x64: "cli-linux-x64" },
+    win32: { arm64: "cli-win32-arm64", x64: "cli-win32-x64" },
+  };
+  const name = names[platform]?.[arch];
+  if (!name) {
+    throw new Error(`No locked Biome CLI package for ${platform}/${arch}`);
+  }
+  return {
+    name: `@biomejs/${name}`,
+    executable: platform === "win32" ? "biome.exe" : "biome",
+  };
+}
 
 describe("resolveFormatter", () => {
   it("infers a project boundary for an absolute intended path", async () => {
@@ -274,6 +317,109 @@ describe("resolveFormatter", () => {
 });
 
 describe("formatSource", () => {
+  it("does not load Prettier configuration above projectRoot", async () => {
+    const parent = await Deno.makeTempDir({
+      prefix: "projectfmt prettier boundary ",
+    });
+    const projectRoot = join(parent, "project");
+    try {
+      await Deno.mkdir(projectRoot);
+      await Deno.writeTextFile(
+        join(parent, ".prettierrc"),
+        JSON.stringify({ singleQuote: true, tabWidth: 7 }),
+      );
+      await copyPackageIntoProject("prettier", projectRoot);
+      assertEquals(
+        await formatSource('function value(){return "parent"}', {
+          formatter: "prettier",
+          filePath: "src/generated.ts",
+          projectRoot,
+        }),
+        'function value() {\n  return "parent";\n}\n',
+      );
+    } finally {
+      await Deno.remove(parent, { recursive: true });
+      await assertRejects(() => Deno.stat(parent), Deno.errors.NotFound);
+    }
+  });
+
+  it("does not load Biome configuration above projectRoot", async () => {
+    const parent = await Deno.makeTempDir({
+      prefix: "projectfmt biome boundary ",
+    });
+    const projectRoot = join(parent, "project");
+    try {
+      await Deno.mkdir(projectRoot);
+      await Deno.writeTextFile(
+        join(parent, "biome.json"),
+        JSON.stringify({
+          formatter: { indentStyle: "space" },
+          javascript: { formatter: { quoteStyle: "single" } },
+        }),
+      );
+      await copyPackageIntoProject("@biomejs/biome", projectRoot);
+      const cli = biomeCliPackage();
+      const biomeRoot = await realpath(
+        join(root, "node_modules", "@biomejs", "biome"),
+      );
+      const cliSource = await realpath(
+        join(biomeRoot, "..", cli.name.split("/")[1]),
+      );
+      const cliRoot = await copyPackageDirectory(
+        cliSource,
+        cli.name,
+        projectRoot,
+      );
+      const cliPath = await realpath(join(cliRoot, cli.executable));
+      const fromRoot = relative(projectRoot, cliPath);
+      assert(
+        !isAbsolute(fromRoot) && fromRoot !== ".." &&
+          !fromRoot.startsWith(`..${sep}`),
+      );
+      assertEquals(
+        await formatSource('const value="parent"', {
+          formatter: "biome",
+          filePath: "src/generated.ts",
+          projectRoot,
+          formatOnly: true,
+        }),
+        'const value = "parent";\n',
+      );
+    } finally {
+      await Deno.remove(parent, { recursive: true });
+      await assertRejects(() => Deno.stat(parent), Deno.errors.NotFound);
+    }
+  });
+
+  it("does not load Deno configuration or EditorConfig above projectRoot", async () => {
+    const parent = await Deno.makeTempDir({
+      prefix: "projectfmt deno boundary ",
+    });
+    const projectRoot = join(parent, "project");
+    try {
+      await Deno.mkdir(projectRoot);
+      await Deno.writeTextFile(
+        join(parent, "deno.json"),
+        JSON.stringify({ fmt: { singleQuote: true, indentWidth: 7 } }),
+      );
+      await Deno.writeTextFile(
+        join(parent, ".editorconfig"),
+        "root = true\n[*]\nindent_style = space\nindent_size = 5\n",
+      );
+      assertEquals(
+        await formatSource('function value(){return "parent"}', {
+          formatter: "deno",
+          filePath: "src/generated.ts",
+          projectRoot,
+        }),
+        'function value() {\n  return "parent";\n}\n',
+      );
+    } finally {
+      await Deno.remove(parent, { recursive: true });
+      await assertRejects(() => Deno.stat(parent), Deno.errors.NotFound);
+    }
+  });
+
   it("accepts an absolute intended path as shorthand", async () => {
     const filePath = fixture("prettier", "src", "generated", "shorthand.ts");
     const source = "const answer={value:42}";

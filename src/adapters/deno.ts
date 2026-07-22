@@ -4,7 +4,7 @@ import { parseJsonc, readTextIfPresent } from "../fs.ts";
 import { matchesGlob } from "../glob.ts";
 import { nearestExistingDirectory } from "../path.ts";
 import { runCommand } from "../process.ts";
-import type { AdapterContext, FormatterAdapter } from "../types.ts";
+import type { FormatterAdapter } from "../types.ts";
 import { configFileEvidence, packageEvidence } from "./discovery.ts";
 
 const configNames = ["deno.json", "deno.jsonc"] as const;
@@ -114,7 +114,7 @@ export const denoAdapter: FormatterAdapter = {
         } file type`,
       );
     }
-    const configPath = closestConfigPath(context);
+    const configPath = context.configPath;
     if (configPath && await isIgnored(context.filePath, configPath)) {
       return { source, ignored: true };
     }
@@ -122,8 +122,9 @@ export const denoAdapter: FormatterAdapter = {
       dirname(context.filePath),
       context.projectRoot,
     );
-    const args = ["fmt", "--ext", extension];
+    const args = ["fmt", "--ext", extension, "--no-editorconfig"];
     if (configPath) args.push("--config", configPath);
+    else args.push("--no-config");
     args.push("-");
     const result = await runCommand("deno", args, { cwd, input: source });
     if (result.code !== 0 || result.signal) {
@@ -136,12 +137,6 @@ export const denoAdapter: FormatterAdapter = {
     return { source: result.stdout, stderr: result.stderr || undefined };
   },
 };
-
-function closestConfigPath(context: AdapterContext): string | null {
-  return context.evidence.find((item) =>
-    item.formatter === "deno" && item.kind === "config"
-  )?.path ?? null;
-}
 
 async function isIgnored(
   filePath: string,

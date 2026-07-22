@@ -55,6 +55,8 @@ export interface AdapterContext {
   projectRoot: string;
   /** Directory whose evidence selected the adapter. */
   configRoot: string;
+  /** Exact selected configuration file, or undefined when none was found. */
+  configPath?: string;
   /** All evidence discovered within projectRoot, nearest first. */
   evidence: readonly DiscoveryEvidence[];
   /** Whether the adapter must restrict processing to formatting. */

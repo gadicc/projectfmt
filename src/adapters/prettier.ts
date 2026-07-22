@@ -90,12 +90,13 @@ export const prettierAdapter: FormatterAdapter = {
       throw new Error("Could not resolve a project-local prettier package");
     }
     const prettier = await importPrettier(implementation);
-    const configPath = closestConfigPath(context);
-    const config = await prettier.resolveConfig(context.filePath, {
-      ...(configPath ? { config: configPath } : {}),
-      editorconfig: true,
-      useCache: false,
-    }) ?? {};
+    const config = context.configPath
+      ? await prettier.resolveConfig(context.filePath, {
+        config: context.configPath,
+        editorconfig: false,
+        useCache: false,
+      }) ?? {}
+      : {};
     const ignorePath = await ignorePaths(context);
     const fileInfo = await prettier.getFileInfo(context.filePath, {
       ignorePath,
@@ -127,14 +128,6 @@ function resolvePrettier(context: AdapterContext): string | null {
 
 async function importPrettier(path: string): Promise<PrettierModule> {
   return await import(pathToFileURL(path).href) as PrettierModule;
-}
-
-function closestConfigPath(context: AdapterContext): string | null {
-  const evidence = context.evidence.find((item) =>
-    item.formatter === "prettier" &&
-    (item.kind === "config" || item.kind === "package-key")
-  );
-  return evidence?.path ?? null;
 }
 
 async function ignorePaths(context: AdapterContext): Promise<string[]> {
