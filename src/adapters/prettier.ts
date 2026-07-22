@@ -1,9 +1,9 @@
 import { dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 
 import { resolveProjectPackage } from "../package.ts";
 import { prettierConfigNames } from "../config-names.ts";
+import { importModule } from "../module-loader.ts";
 import type {
   AdapterContext,
   AdapterFormatResult,
@@ -116,7 +116,7 @@ function resolvePrettier(context: AdapterContext): string | null {
 }
 
 async function importPrettier(path: string): Promise<PrettierModule> {
-  return await import(pathToFileURL(path).href) as PrettierModule;
+  return await importModule(path) as unknown as PrettierModule;
 }
 
 async function ignorePaths(context: AdapterContext): Promise<string[]> {

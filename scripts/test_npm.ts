@@ -38,7 +38,10 @@ try {
   }
   if (
     packageJson.name !== "projectfmt" || packageJson.dependencies ||
-    packageJson.sideEffects !== false
+    packageJson.sideEffects !== false ||
+    Object.keys(packageJson.exports).some((name) =>
+      name.startsWith("./__test__")
+    )
   ) {
     throw new Error(
       "Built package metadata does not match the public contract",
@@ -145,6 +148,14 @@ async function main() {
     projectRoot: process.cwd(),
   });
   if (resolution.status !== "disabled") throw new Error("bad resolution");
+  const prettier = await formatSource('const value="node-cjs"', {
+    formatter: "prettier",
+    filePath: "tests/fixtures/prettier/node-smoke.ts",
+    projectRoot: ${JSON.stringify(root)},
+  });
+  if (prettier !== "const value = 'node-cjs'\\n") {
+    throw new Error("Prettier mismatch");
+  }
   const deno = await formatSource('{"runtime":"node-cjs"}', {
     formatter: "deno",
     filePath: "tests/fixtures/deno/node-smoke.json",
