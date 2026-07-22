@@ -4,8 +4,9 @@ _Format generated code the way its destination project expects._
 
 Copyright (c) 2015 by Gadi Cohen. [MIT Licensed](./LICENSE.txt).
 
-[![JSR](https://jsr.io/badges/@gadicc/projectfmt)](https://jsr.io/@gadicc/projectfmt)
 [![npm](https://img.shields.io/npm/v/projectfmt)](https://www.npmjs.com/package/projectfmt)
+[![JSR](https://jsr.io/badges/@gadicc/projectfmt)](https://jsr.io/@gadicc/projectfmt)
+[![JSR score](https://jsr.io/badges/@gadicc/projectfmt/score)](https://jsr.io/@gadicc/projectfmt)
 [![CI](https://github.com/gadicc/projectfmt/actions/workflows/release.yml/badge.svg)](https://github.com/gadicc/projectfmt/actions/workflows/release.yml)
 [![coverage](https://img.shields.io/codecov/c/github/gadicc/projectfmt)](https://codecov.io/gh/gadicc/projectfmt)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
