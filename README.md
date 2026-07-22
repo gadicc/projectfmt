@@ -269,9 +269,21 @@ await formatSource(source, {
 });
 ```
 
-Adapter names must be unique. Custom adapters define their own source-processing
-behavior. Because automatic root inference cannot know custom project markers,
-callers using custom adapters should normally provide `projectRoot` explicitly.
+Adapter names must be non-empty and unique, priorities must be finite, and all
+three lifecycle methods are required at runtime. Discovery returns an array of
+evidence whose formatter matches the adapter, kind is supported, path is
+absolute and within `projectRoot`, description is non-empty, and strength is
+finite. A nested evidence path is valid, but ranking and `configRoot` use the
+directory passed to `discover`, so evidence cannot spoof its search distance.
+
+`probe` must return an object with a boolean `available` and optional string
+details. `format` must return an object with string `source`, optional boolean
+`ignored`, and optional string `stderr`. projectfmt validates these results,
+passes the same context (including `formatOnly`) to probe and format, and wraps
+probe or format failures in structured errors while preserving their causes and
+available stderr. Because automatic root inference cannot know custom project
+markers, callers using custom adapters should normally provide `projectRoot`
+explicitly.
 
 ## Resolution rules
 

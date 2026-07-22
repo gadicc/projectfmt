@@ -72,6 +72,35 @@ function biomeCliPackage(): { name: string; executable: string } {
   };
 }
 
+function customTestAdapter(name: string): FormatterAdapter {
+  return {
+    name,
+    priority: 100,
+    discover(directory, context) {
+      return Promise.resolve(
+        directory === context.projectRoot
+          ? [{
+            formatter: name,
+            kind: "custom",
+            path: join(directory, `${name}.config`),
+            description: `${name} test evidence`,
+            strength: 30,
+          }]
+          : [],
+      );
+    },
+    probe() {
+      return Promise.resolve({
+        available: true,
+        implementation: "in-process test adapter",
+      });
+    },
+    format(source) {
+      return Promise.resolve({ source });
+    },
+  };
+}
+
 describe("resolveFormatter", () => {
   it("infers a project boundary for an absolute intended path", async () => {
     const resolution = await resolveFormatter(
@@ -907,6 +936,8 @@ export async function format(source) { return "formatted:" + source; }
   });
 
   it("supports custom adapters", async () => {
+    let probeFormatOnly: boolean | undefined;
+    let formatFormatOnly: boolean | undefined;
     const adapter: FormatterAdapter = {
       name: "uppercase",
       priority: 100,
@@ -923,13 +954,15 @@ export async function format(source) { return "formatted:" + source; }
             : [],
         );
       },
-      probe() {
+      probe(context) {
+        probeFormatOnly = context.formatOnly;
         return Promise.resolve({
           available: true,
           implementation: "in-process test adapter",
         });
       },
-      format(source) {
+      format(source, context) {
+        formatFormatOnly = context.formatOnly;
         return Promise.resolve({ source: source.toUpperCase() });
       },
     };
@@ -938,9 +971,322 @@ export async function format(source) { return "formatted:" + source; }
       filePath: "generated.custom",
       projectRoot: root,
       adapters: [adapter],
+      formatOnly: true,
     });
     assertEquals(result.source, "HELLO");
     assertEquals(result.resolution.formatter, "uppercase");
+    assertEquals(probeFormatOnly, true);
+    assertEquals(formatFormatOnly, true);
+  });
+
+  it("validates custom adapter definitions", async () => {
+    const filePath = join(root, "generated.custom");
+    const base = customTestAdapter("definition-test");
+    const cases: Array<{
+      name: string;
+      adapter: unknown;
+      formatter: string | null;
+    }> = [
+      { name: "non-object", adapter: null, formatter: null },
+      {
+        name: "empty name",
+        adapter: { ...base, name: "" },
+        formatter: "",
+      },
+      {
+        name: "whitespace name",
+        adapter: { ...base, name: "   " },
+        formatter: "   ",
+      },
+      {
+        name: "duplicate name",
+        adapter: { ...base, name: "prettier" },
+        formatter: "prettier",
+      },
+      {
+        name: "non-finite priority",
+        adapter: { ...base, priority: Number.POSITIVE_INFINITY },
+        formatter: base.name,
+      },
+      {
+        name: "missing discover",
+        adapter: { ...base, discover: undefined },
+        formatter: base.name,
+      },
+      {
+        name: "missing probe",
+        adapter: { ...base, probe: undefined },
+        formatter: base.name,
+      },
+      {
+        name: "missing format",
+        adapter: { ...base, format: undefined },
+        formatter: base.name,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const error = await assertRejects(
+        () =>
+          resolveFormatter({
+            formatter: "definition-test",
+            filePath,
+            projectRoot: root,
+            adapters: [testCase.adapter as FormatterAdapter],
+          }),
+        FormatterResolutionError,
+        undefined,
+        testCase.name,
+      );
+      assertEquals(error.code, "INVALID_OPTIONS", testCase.name);
+      assertEquals(error.formatter, testCase.formatter, testCase.name);
+      assertEquals(error.filePath, filePath, testCase.name);
+      assertEquals(error.projectRoot, root, testCase.name);
+      assertEquals(error.evidence, [], testCase.name);
+      assertInstanceOf(error.cause, TypeError, testCase.name);
+    }
+  });
+
+  it("validates custom discovery evidence", async () => {
+    const formatter = "invalid-evidence";
+    const filePath = join(root, "src", "generated.custom");
+    const valid = {
+      formatter,
+      kind: "custom",
+      path: join(root, "invalid-evidence.config"),
+      description: "test evidence",
+      strength: 30,
+    };
+    const cases: Array<{ name: string; value: unknown }> = [
+      { name: "non-array output", value: valid },
+      {
+        name: "mismatched formatter",
+        value: [{ ...valid, formatter: "another-adapter" }],
+      },
+      { name: "relative path", value: [{ ...valid, path: "config.json" }] },
+      {
+        name: "outside path",
+        value: [{ ...valid, path: join(root, "..", "outside.config") }],
+      },
+      { name: "invalid kind", value: [{ ...valid, kind: "unknown" }] },
+      { name: "empty description", value: [{ ...valid, description: " " }] },
+      {
+        name: "non-finite strength",
+        value: [{ ...valid, strength: Number.NaN }],
+      },
+    ];
+
+    for (const testCase of cases) {
+      const adapter = {
+        ...customTestAdapter(formatter),
+        discover(
+          directory: string,
+          context: { projectRoot: string },
+        ) {
+          return Promise.resolve(
+            (directory === context.projectRoot ? testCase.value : []) as never,
+          );
+        },
+      };
+      const error = await assertRejects(
+        () =>
+          resolveFormatter({
+            formatter,
+            filePath,
+            projectRoot: root,
+            adapters: [adapter],
+          }),
+        FormatterResolutionError,
+        undefined,
+        testCase.name,
+      );
+      assertEquals(error.code, "INVALID_OPTIONS", testCase.name);
+      assertEquals(error.formatter, formatter, testCase.name);
+      assertEquals(error.filePath, filePath, testCase.name);
+      assertEquals(error.projectRoot, root, testCase.name);
+      assertInstanceOf(error.cause, TypeError, testCase.name);
+    }
+  });
+
+  it("ranks nested custom evidence by the directory being scanned", async () => {
+    const formatter = "nested-evidence";
+    const filePath = join(root, "src", "generated.custom");
+    const evidencePath = join(root, "nested", "markers", "adapter.config");
+    let probeConfigRoot: string | undefined;
+    let probeConfigPath: string | undefined;
+    const adapter: FormatterAdapter = {
+      ...customTestAdapter(formatter),
+      discover(directory, context) {
+        return Promise.resolve(
+          directory === context.projectRoot
+            ? [{
+              formatter,
+              kind: "config",
+              path: evidencePath,
+              description: "nested marker",
+              strength: 30,
+            }]
+            : [],
+        );
+      },
+      probe(context) {
+        probeConfigRoot = context.configRoot;
+        probeConfigPath = context.configPath;
+        return Promise.resolve({ available: true });
+      },
+    };
+
+    const resolution = await resolveFormatter({
+      formatter,
+      filePath,
+      projectRoot: root,
+      adapters: [adapter],
+    });
+    const evidence = resolution.evidence.find((item) =>
+      item.formatter === formatter
+    );
+    assertEquals(resolution.configRoot, root);
+    assertEquals(evidence?.path, evidencePath);
+    assertEquals(evidence?.distance, 1);
+    assertEquals(probeConfigRoot, root);
+    assertEquals(probeConfigPath, evidencePath);
+  });
+
+  it("validates and wraps custom probe outcomes", async () => {
+    const formatter = "probe-validation";
+    const filePath = join(root, "generated.custom");
+    for (
+      const value of [
+        null,
+        {},
+        { available: "yes" },
+        { available: true, implementation: 1 },
+        { available: true, version: 1 },
+        { available: false, reason: 1 },
+      ]
+    ) {
+      const adapter = {
+        ...customTestAdapter(formatter),
+        probe() {
+          return Promise.resolve(value as never);
+        },
+      };
+      const error = await assertRejects(
+        () =>
+          resolveFormatter({
+            formatter,
+            filePath,
+            projectRoot: root,
+            adapters: [adapter],
+          }),
+        FormatterResolutionError,
+      );
+      assertEquals(error.code, "INVALID_OPTIONS");
+      assertEquals(error.formatter, formatter);
+      assertEquals(error.filePath, filePath);
+      assertEquals(error.projectRoot, root);
+      assert(error.evidence.some((item) => item.formatter === formatter));
+      assertInstanceOf(error.cause, TypeError);
+    }
+
+    const cause = Object.assign(new Error("probe failed"), {
+      stderr: "probe stderr",
+    });
+    const throwing = {
+      ...customTestAdapter(formatter),
+      probe(): Promise<never> {
+        return Promise.reject(cause);
+      },
+    };
+    const error = await assertRejects(
+      () =>
+        resolveFormatter({
+          formatter,
+          filePath,
+          projectRoot: root,
+          adapters: [throwing],
+        }),
+      FormatterResolutionError,
+    );
+    assertEquals(error.code, "FORMATTER_UNAVAILABLE");
+    assertEquals(error.formatter, formatter);
+    assertEquals(error.filePath, filePath);
+    assertEquals(error.projectRoot, root);
+    assert(error.evidence.some((item) => item.formatter === formatter));
+    assert(error.cause === cause);
+    assertEquals(error.stderr, "probe stderr");
+  });
+
+  it("validates and wraps custom format outcomes", async () => {
+    const formatter = "format-validation";
+    const filePath = join(root, "generated.custom");
+    for (
+      const value of [
+        null,
+        {},
+        { source: 1 },
+        { source: "valid", ignored: "yes" },
+        { source: "valid", stderr: 1 },
+        { source: 1, stderr: "malformed stderr" },
+      ]
+    ) {
+      const adapter = {
+        ...customTestAdapter(formatter),
+        format() {
+          return Promise.resolve(value as never);
+        },
+      };
+      const error = await assertRejects(
+        () =>
+          formatSource("source", {
+            formatter,
+            filePath,
+            projectRoot: root,
+            adapters: [adapter],
+          }),
+        FormatterExecutionError,
+      );
+      assertEquals(error.code, "FORMATTER_FAILED");
+      assertEquals(error.formatter, formatter);
+      assertEquals(error.filePath, filePath);
+      assertEquals(error.projectRoot, root);
+      assert(error.evidence.some((item) => item.formatter === formatter));
+      assertInstanceOf(error.cause, TypeError);
+      assertEquals(
+        error.stderr,
+        value && typeof value === "object" &&
+          "stderr" in value && typeof value.stderr === "string"
+          ? value.stderr
+          : undefined,
+      );
+    }
+
+    const cause = Object.assign(new Error("format failed"), {
+      stderr: "format stderr",
+    });
+    const throwing = {
+      ...customTestAdapter(formatter),
+      format(): Promise<never> {
+        return Promise.reject(cause);
+      },
+    };
+    const error = await assertRejects(
+      () =>
+        formatSource("source", {
+          formatter,
+          filePath,
+          projectRoot: root,
+          adapters: [throwing],
+        }),
+      FormatterExecutionError,
+    );
+    assertEquals(error.code, "FORMATTER_FAILED");
+    assertEquals(error.formatter, formatter);
+    assertEquals(error.filePath, filePath);
+    assertEquals(error.projectRoot, root);
+    assert(error.evidence.some((item) => item.formatter === formatter));
+    assert(error.cause === cause);
+    assertEquals(error.stderr, "format stderr");
   });
 
   it("preserves formatter failures, cause, stderr, and diagnostics", async () => {

@@ -25,11 +25,11 @@ export interface DiscoveryEvidence {
   formatter: FormatterName;
   /** What kind of project signal was found. */
   kind: EvidenceKind;
-  /** Absolute path to the file that supplied the evidence. */
+  /** Absolute in-project path to the file that supplied the evidence. */
   path: string;
-  /** Human-readable description suitable for diagnostics. */
+  /** Non-empty human-readable description suitable for diagnostics. */
   description: string;
-  /** Higher values win within the same directory. Built-ins use 30/20/10. */
+  /** Finite value; higher wins within one directory. Built-ins use 30/20/10. */
   strength: number;
   /** Directory distance from the intended file: zero is its own directory. */
   distance: number;
@@ -75,16 +75,16 @@ export interface AdapterFormatResult {
 
 /** Extension point for discovering, probing, and invoking a formatter. */
 export interface FormatterAdapter {
-  /** Stable selection name. */
+  /** Non-empty stable selection name, unique across all active adapters. */
   name: FormatterName;
-  /** Tie-breaker after directory and evidence strength. Higher wins. */
+  /** Finite tie-breaker after directory and evidence strength. Higher wins. */
   priority?: number;
-  /** Find project signals at one directory in the upward search. */
+  /** Find validated, in-project signals for one directory in the upward search. */
   discover(
     directory: string,
     context: Pick<AdapterContext, "filePath" | "projectRoot">,
   ): Promise<readonly Omit<DiscoveryEvidence, "distance">[]>;
-  /** Locate a usable implementation without installing anything. */
+  /** Locate a usable implementation without installing; failures are wrapped. */
   probe(context: AdapterContext): Promise<AdapterAvailability>;
   /** Process source according to the adapter's documented behavior. */
   format(source: string, context: AdapterContext): Promise<AdapterFormatResult>;
@@ -94,7 +94,7 @@ export interface FormatterAdapter {
 export interface FormatterCandidate {
   /** Adapter name. */
   formatter: FormatterName;
-  /** Directory containing this candidate's evidence. */
+  /** Directory being scanned when this candidate's evidence was returned. */
   configRoot: string;
   /** Evidence for this formatter in this directory. */
   evidence: readonly DiscoveryEvidence[];

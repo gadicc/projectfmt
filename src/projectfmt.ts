@@ -1,11 +1,14 @@
-import { dirname } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 
 import { builtinAdapters } from "./adapters/index.ts";
 import { FormatterExecutionError, FormatterResolutionError } from "./errors.ts";
 import { ancestorDirectories, normalizePaths } from "./path.ts";
 import type {
+  AdapterAvailability,
   AdapterContext,
+  AdapterFormatResult,
   DiscoveryEvidence,
+  EvidenceKind,
   FormatSourceOptions,
   FormatSourceResult,
   FormatterAdapter,
@@ -31,7 +34,11 @@ export async function resolveFormatter(
     options.projectRoot,
   );
   const requested = options.formatter ?? "auto";
-  const adapters = adapterMap(options.adapters ?? []);
+  const adapters = adapterMap(
+    options.adapters ?? [],
+    filePath,
+    projectRoot,
+  );
   if (requested === "none") {
     return {
       status: "disabled",
@@ -47,8 +54,9 @@ export async function resolveFormatter(
     };
   }
 
-  const evidence = await discover(adapters, filePath, projectRoot);
-  const candidates = buildCandidates(evidence, adapters);
+  const discovered = await discover(adapters, filePath, projectRoot);
+  const evidence = discovered.map((item) => item.evidence);
+  const candidates = buildCandidates(discovered, adapters);
 
   if (requested !== "auto") {
     const adapter = adapters.get(requested);
@@ -76,6 +84,7 @@ export async function resolveFormatter(
       evidence,
       candidates,
       ambiguous: false,
+      formatOnly: options.formatOnly,
       reason: `Formatter ${JSON.stringify(requested)} was explicitly selected`,
     });
   }
@@ -160,6 +169,7 @@ export async function resolveFormatter(
     evidence,
     candidates,
     ambiguous,
+    formatOnly: options.formatOnly,
     reason,
   });
 }
@@ -224,7 +234,11 @@ export async function formatSourceWithResult(
     );
   }
 
-  const adapters = adapterMap(options.adapters ?? []);
+  const adapters = adapterMap(
+    options.adapters ?? [],
+    resolution.filePath,
+    resolution.projectRoot,
+  );
   const adapter = adapters.get(resolution.formatter!);
   if (!adapter) {
     throw new FormatterResolutionError(
@@ -241,7 +255,10 @@ export async function formatSourceWithResult(
   }
   const context = adapterContext(resolution, options);
   try {
-    const formatted = await adapter.format(source, context);
+    const formatted = validateFormatResult(
+      await adapter.format(source, context) as unknown,
+      adapter.name,
+    );
     return {
       source: formatted.source,
       changed: formatted.source !== source,
@@ -286,33 +303,91 @@ function normalizeOptions(
 
 function adapterMap(
   customAdapters: readonly FormatterAdapter[],
+  filePath: string,
+  projectRoot: string,
 ): Map<string, FormatterAdapter> {
+  if (!Array.isArray(customAdapters)) {
+    throw invalidAdapterOptions(
+      "Custom adapters must be an array",
+      undefined,
+      filePath,
+      projectRoot,
+    );
+  }
   const map = new Map<string, FormatterAdapter>();
-  for (const adapter of [...builtinAdapters, ...customAdapters]) {
-    if (!adapter.name || map.has(adapter.name)) {
-      throw new FormatterResolutionError(
-        `Formatter adapter names must be non-empty and unique: ${adapter.name}`,
-        { code: "INVALID_OPTIONS", formatter: adapter.name },
+  const definitions: readonly unknown[] = [
+    ...builtinAdapters,
+    ...customAdapters,
+  ];
+  for (const value of definitions) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw invalidAdapterOptions(
+        "Formatter adapters must be objects",
+        undefined,
+        filePath,
+        projectRoot,
       );
     }
-    map.set(adapter.name, adapter);
+    const adapter = value as Partial<FormatterAdapter>;
+    const formatter = typeof adapter.name === "string"
+      ? adapter.name
+      : undefined;
+    if (!formatter || formatter.trim().length === 0 || map.has(formatter)) {
+      throw invalidAdapterOptions(
+        `Formatter adapter names must be non-empty and unique: ${
+          String(adapter.name)
+        }`,
+        formatter,
+        filePath,
+        projectRoot,
+      );
+    }
+    if (
+      adapter.priority !== undefined &&
+      (typeof adapter.priority !== "number" ||
+        !Number.isFinite(adapter.priority))
+    ) {
+      throw invalidAdapterOptions(
+        `Formatter adapter ${formatter} priority must be a finite number`,
+        formatter,
+        filePath,
+        projectRoot,
+      );
+    }
+    for (const method of ["discover", "probe", "format"] as const) {
+      if (typeof adapter[method] !== "function") {
+        throw invalidAdapterOptions(
+          `Formatter adapter ${formatter} must define a ${method} method`,
+          formatter,
+          filePath,
+          projectRoot,
+        );
+      }
+    }
+    map.set(formatter, adapter as FormatterAdapter);
   }
   return map;
+}
+
+interface LocatedEvidence {
+  directory: string;
+  evidence: DiscoveryEvidence;
 }
 
 async function discover(
   adapters: ReadonlyMap<string, FormatterAdapter>,
   filePath: string,
   projectRoot: string,
-): Promise<DiscoveryEvidence[]> {
-  const all: DiscoveryEvidence[] = [];
+): Promise<LocatedEvidence[]> {
+  const all: LocatedEvidence[] = [];
   const directories = ancestorDirectories(filePath, projectRoot);
   for (let distance = 0; distance < directories.length; distance++) {
     const directory = directories[distance];
     const found = await Promise.all(
       [...adapters.values()].map(async (adapter) => {
+        let items: unknown;
         try {
-          return await adapter.discover(directory, { filePath, projectRoot });
+          items = await adapter.discover(directory, { filePath, projectRoot });
         } catch (cause) {
           throw new FormatterResolutionError(
             `Failed to inspect ${directory} for ${adapter.name}: ${
@@ -323,35 +398,49 @@ async function discover(
               formatter: adapter.name,
               filePath,
               projectRoot,
+              evidence: all.map((item) => item.evidence),
               cause,
             },
           );
         }
+        return validateDiscovery(
+          items,
+          adapter.name,
+          filePath,
+          projectRoot,
+          all.map((item) => item.evidence),
+        );
       }),
     );
     for (const items of found) {
-      for (const item of items) all.push({ ...item, distance });
+      for (const item of items) {
+        all.push({
+          directory,
+          evidence: { ...item, distance },
+        });
+      }
     }
   }
   return all;
 }
 
 function buildCandidates(
-  evidence: readonly DiscoveryEvidence[],
+  evidence: readonly LocatedEvidence[],
   adapters: ReadonlyMap<string, FormatterAdapter>,
 ): FormatterCandidate[] {
   const byDirectoryAndFormatter = new Map<string, DiscoveryEvidence[]>();
-  for (const item of evidence) {
-    const key = `${dirname(item.path)}\0${item.formatter}`;
+  for (const located of evidence) {
+    const item = located.evidence;
+    const key = `${located.directory}\0${item.formatter}`;
     const items = byDirectoryAndFormatter.get(key) ?? [];
     items.push(item);
     byDirectoryAndFormatter.set(key, items);
   }
-  return [...byDirectoryAndFormatter.values()].map((items) => {
+  return [...byDirectoryAndFormatter.entries()].map(([key, items]) => {
     const formatter = items[0].formatter;
     return {
       formatter,
-      configRoot: dirname(items[0].path),
+      configRoot: key.slice(0, key.indexOf("\0")),
       evidence: items.sort((left, right) => right.strength - left.strength),
       bestStrength: Math.max(...items.map((item) => item.strength)),
       priority: adapters.get(formatter)?.priority ?? 0,
@@ -374,6 +463,7 @@ async function finalize(options: {
   evidence: readonly DiscoveryEvidence[];
   candidates: readonly FormatterCandidate[];
   ambiguous: boolean;
+  formatOnly?: boolean;
 }): Promise<FormatterResolution> {
   const context: AdapterContext = {
     filePath: options.filePath,
@@ -382,11 +472,37 @@ async function finalize(options: {
     configPath: selectedConfigPath(
       options.adapter.name,
       options.configRoot,
-      options.evidence,
+      options.candidates,
     ),
     evidence: options.evidence,
+    formatOnly: options.formatOnly,
   };
-  const availability = await options.adapter.probe(context);
+  let result: unknown;
+  try {
+    result = await options.adapter.probe(context);
+  } catch (cause) {
+    throw new FormatterResolutionError(
+      `Failed to probe formatter ${options.adapter.name}: ${
+        errorMessage(cause)
+      }`,
+      {
+        code: "FORMATTER_UNAVAILABLE",
+        formatter: options.adapter.name,
+        filePath: options.filePath,
+        projectRoot: options.projectRoot,
+        evidence: options.evidence,
+        stderr: stderrFrom(cause),
+        cause,
+      },
+    );
+  }
+  const availability = validateAvailability(
+    result,
+    options.adapter.name,
+    options.filePath,
+    options.projectRoot,
+    options.evidence,
+  );
   return baseResolution({
     status: availability.available ? "selected" : "unavailable",
     formatter: options.adapter.name,
@@ -421,7 +537,7 @@ function adapterContext(
     configPath: selectedConfigPath(
       resolution.formatter!,
       resolution.configRoot!,
-      resolution.evidence,
+      resolution.candidates,
     ),
     evidence: resolution.evidence,
     formatOnly: options.formatOnly,
@@ -431,11 +547,229 @@ function adapterContext(
 function selectedConfigPath(
   formatter: string,
   configRoot: string,
-  evidence: readonly DiscoveryEvidence[],
+  candidates: readonly FormatterCandidate[],
 ): string | undefined {
-  return evidence.find((item) =>
-    item.formatter === formatter && dirname(item.path) === configRoot &&
-    (item.kind === "config" ||
-      (formatter === "prettier" && item.kind === "package-key"))
+  return candidates.find((candidate) =>
+    candidate.formatter === formatter && candidate.configRoot === configRoot
+  )?.evidence.find((item) => (item.kind === "config" ||
+    (formatter === "prettier" && item.kind === "package-key"))
   )?.path;
+}
+
+const evidenceKinds = new Set<EvidenceKind>([
+  "config",
+  "package-key",
+  "script",
+  "dependency",
+  "custom",
+]);
+
+function validateDiscovery(
+  value: unknown,
+  formatter: string,
+  filePath: string,
+  projectRoot: string,
+  evidence: readonly DiscoveryEvidence[],
+): Omit<DiscoveryEvidence, "distance">[] {
+  if (!Array.isArray(value)) {
+    throw invalidAdapterOptions(
+      `Formatter adapter ${formatter} discover must return an array`,
+      formatter,
+      filePath,
+      projectRoot,
+      evidence,
+    );
+  }
+  return value.map((raw, index) => {
+    const label = `Formatter adapter ${formatter} evidence ${index}`;
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      throw invalidAdapterOptions(
+        `${label} must be an object`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+    const item = raw as Record<string, unknown>;
+    if (item.formatter !== formatter) {
+      throw invalidAdapterOptions(
+        `${label} formatter must equal ${formatter}`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+    if (!evidenceKinds.has(item.kind as EvidenceKind)) {
+      throw invalidAdapterOptions(
+        `${label} kind is invalid`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+    if (
+      typeof item.path !== "string" || !isAbsolute(item.path) ||
+      !isWithin(projectRoot, item.path)
+    ) {
+      throw invalidAdapterOptions(
+        `${label} path must be absolute and within projectRoot`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+    if (
+      typeof item.description !== "string" ||
+      item.description.trim().length === 0
+    ) {
+      throw invalidAdapterOptions(
+        `${label} description must be non-empty`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+    if (typeof item.strength !== "number" || !Number.isFinite(item.strength)) {
+      throw invalidAdapterOptions(
+        `${label} strength must be finite`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+    return {
+      formatter,
+      kind: item.kind as EvidenceKind,
+      path: item.path,
+      description: item.description,
+      strength: item.strength,
+    };
+  });
+}
+
+function validateAvailability(
+  value: unknown,
+  formatter: string,
+  filePath: string,
+  projectRoot: string,
+  evidence: readonly DiscoveryEvidence[],
+): AdapterAvailability {
+  const label = `Formatter adapter ${formatter} probe result`;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw invalidAdapterOptions(
+      `${label} must be an object`,
+      formatter,
+      filePath,
+      projectRoot,
+      evidence,
+    );
+  }
+  const result = value as Record<string, unknown>;
+  if (typeof result.available !== "boolean") {
+    throw invalidAdapterOptions(
+      `${label}.available must be boolean`,
+      formatter,
+      filePath,
+      projectRoot,
+      evidence,
+    );
+  }
+  for (const property of ["implementation", "version", "reason"] as const) {
+    if (
+      result[property] !== undefined && typeof result[property] !== "string"
+    ) {
+      throw invalidAdapterOptions(
+        `${label}.${property} must be a string when present`,
+        formatter,
+        filePath,
+        projectRoot,
+        evidence,
+      );
+    }
+  }
+  return {
+    available: result.available,
+    implementation: result.implementation as string | undefined,
+    version: result.version as string | undefined,
+    reason: result.reason as string | undefined,
+  };
+}
+
+function validateFormatResult(
+  value: unknown,
+  formatter: string,
+): AdapterFormatResult {
+  const label = `Formatter adapter ${formatter} format result`;
+  const stderr = value !== null && typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof (value as Record<string, unknown>).stderr === "string"
+    ? (value as Record<string, string>).stderr
+    : undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw lifecycleTypeError(`${label} must be an object`, stderr);
+  }
+  const result = value as Record<string, unknown>;
+  if (typeof result.source !== "string") {
+    throw lifecycleTypeError(`${label}.source must be a string`, stderr);
+  }
+  if (result.ignored !== undefined && typeof result.ignored !== "boolean") {
+    throw lifecycleTypeError(
+      `${label}.ignored must be boolean when present`,
+      stderr,
+    );
+  }
+  if (result.stderr !== undefined && typeof result.stderr !== "string") {
+    throw lifecycleTypeError(`${label}.stderr must be a string when present`);
+  }
+  return {
+    source: result.source,
+    ignored: result.ignored as boolean | undefined,
+    stderr: result.stderr as string | undefined,
+  };
+}
+
+function invalidAdapterOptions(
+  message: string,
+  formatter: string | undefined,
+  filePath: string,
+  projectRoot: string,
+  evidence: readonly DiscoveryEvidence[] = [],
+): FormatterResolutionError {
+  return new FormatterResolutionError(message, {
+    code: "INVALID_OPTIONS",
+    formatter,
+    filePath,
+    projectRoot,
+    evidence,
+    cause: new TypeError(message),
+  });
+}
+
+function lifecycleTypeError(message: string, stderr?: string): TypeError {
+  const error = new TypeError(message) as TypeError & { stderr?: string };
+  error.stderr = stderr;
+  return error;
+}
+
+function isWithin(projectRoot: string, path: string): boolean {
+  const fromRoot = relative(projectRoot, path);
+  return fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) &&
+    !isAbsolute(fromRoot);
+}
+
+function stderrFrom(cause: unknown): string | undefined {
+  return cause instanceof Error && "stderr" in cause &&
+      typeof (cause as Error & { stderr?: unknown }).stderr === "string"
+    ? (cause as Error & { stderr: string }).stderr
+    : undefined;
+}
+
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
