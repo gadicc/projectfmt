@@ -1,0 +1,6 @@
+/coverage
+/coverage.lcov
+/node_modules
+/npm
+*.tgz
+.DS_Store

@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks and artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Codecov OIDC
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Format, lint, typecheck, and test with coverage
+        run: deno task check:ci
+      - name: Validate JSR and npm artifacts
+        run: deno task test:packages
+      - uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+
+  platforms:
+    name: Runtime smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: deno task check
+        shell: bash

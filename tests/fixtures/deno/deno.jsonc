@@ -1,0 +1,9 @@
+{
+  // The parser accepts JSONC and the CLI receives this exact config.
+  "fmt": {
+    "indentWidth": 4,
+    "singleQuote": true,
+    "semiColons": false,
+    "exclude": ["src/generated/ignored.ts"]
+  }
+}

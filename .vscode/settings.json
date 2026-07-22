@@ -1,0 +1,11 @@
+{
+  "deno.enable": true,
+  "deno.enablePaths": ["."],
+  "deno.lint": true,
+  "editor.defaultFormatter": "denoland.vscode-deno",
+  "editor.formatOnSave": true,
+  "files.eol": "\n",
+  "javascript.validate.enable": false,
+  "typescript.disableAutomaticTypeAcquisition": true,
+  "typescript.validate.enable": false
+}
