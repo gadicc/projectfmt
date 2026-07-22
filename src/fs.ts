@@ -72,7 +72,35 @@ export function parseJsonc(text: string): unknown {
     }
   }
 
-  return JSON.parse(output.replace(/,\s*([}\]])/g, "$1"));
+  let withoutTrailingCommas = "";
+  inString = false;
+  escaped = false;
+  for (let index = 0; index < output.length; index++) {
+    const char = output[index];
+    if (inString) {
+      withoutTrailingCommas += char;
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      withoutTrailingCommas += char;
+      continue;
+    }
+    if (char === ",") {
+      let nextIndex = index + 1;
+      while (/\s/.test(output[nextIndex] ?? "")) nextIndex++;
+      if (output[nextIndex] === "}" || output[nextIndex] === "]") {
+        withoutTrailingCommas += " ";
+        continue;
+      }
+    }
+    withoutTrailingCommas += char;
+  }
+
+  return JSON.parse(withoutTrailingCommas);
 }
 
 export async function readJsoncIfPresent(
