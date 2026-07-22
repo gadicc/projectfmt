@@ -1,0 +1,7 @@
+{
+  "exclude": ["src/**"],
+  "fmt": {
+    "include": ["src/**/*.ts"],
+    "exclude": ["!src/keep.ts"]
+  }
+}

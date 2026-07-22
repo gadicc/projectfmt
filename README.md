@@ -286,6 +286,12 @@ No adapter creates a temporary source or destination file. Configless Biome
 calls create and unconditionally remove a temporary empty configuration. Paths
 containing spaces are passed as process arguments rather than shell strings.
 
+The Deno adapter evaluates top-level and `fmt` exclusions in order, including
+negated re-inclusions. Markdown suffix aliases such as `.markdown` map to the
+canonical `md` media type. Other media types and any required unstable flags are
+derived from the selected Deno 2 executable's `fmt --help` output on each call,
+so version-gated formats are used only when that runtime advertises them.
+
 ## Errors and diagnostics
 
 `FormatterResolutionError` covers invalid options, strict ambiguity, missing

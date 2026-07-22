@@ -647,6 +647,60 @@ describe("formatSource", () => {
     assertEquals(ignored.ignored, true);
   });
 
+  it("matches Deno include globs for virtual paths", async () => {
+    for (const extension of ["ts", "tsx"]) {
+      const result = await formatSourceWithResult("const  value=1", {
+        formatter: "deno",
+        filePath: `tests/fixtures/deno/include/src/nested/value.${extension}`,
+        projectRoot: root,
+      });
+      assertEquals(result.source, "const value = 1;\n");
+      assertEquals(result.ignored, false);
+    }
+    const ignored = await formatSourceWithResult("const  value=1", {
+      formatter: "deno",
+      filePath: "tests/fixtures/deno/include/src/nested/value.js",
+      projectRoot: root,
+    });
+    assertEquals(ignored.source, "const  value=1");
+    assertEquals(ignored.ignored, true);
+  });
+
+  it("applies ordered top-level and Deno fmt exclusions", async () => {
+    const kept = await formatSourceWithResult("const  value=1", {
+      formatter: "deno",
+      filePath: "tests/fixtures/deno/ordered/src/keep.ts",
+      projectRoot: root,
+    });
+    assertEquals(kept.source, "const value = 1;\n");
+    assertEquals(kept.ignored, false);
+
+    const ignored = await formatSourceWithResult("const  value=1", {
+      formatter: "deno",
+      filePath: "tests/fixtures/deno/ordered/src/other.ts",
+      projectRoot: root,
+    });
+    assertEquals(ignored.source, "const  value=1");
+    assertEquals(ignored.ignored, true);
+  });
+
+  it("maps Markdown aliases to Deno's canonical extension", async () => {
+    const source = "#heading";
+    const canonical = await formatSource(source, {
+      formatter: "deno",
+      filePath: "tests/fixtures/deno/aliases/readme.md",
+      projectRoot: root,
+    });
+    assertEquals(
+      await formatSource(source, {
+        formatter: "deno",
+        filePath: "tests/fixtures/deno/aliases/readme.markdown",
+        projectRoot: root,
+      }),
+      canonical,
+    );
+  });
+
   it("supports none and no configured formatter without side effects", async () => {
     const source = "const     untouched=1";
     assertEquals(

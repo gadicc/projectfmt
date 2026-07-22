@@ -28,15 +28,15 @@
 
 projectfmt pre-classifies virtual files before invoking deno fmt, so its
 include, exclude, glob, and extension rules must agree with the installed Deno
-runtime. The current subset misses top-level exclusions, ordered negated
-exceptions and brace globs, and it passes aliases or unsupported media types
-directly to --ext. These mismatches produce false ignores or avoidable formatter
-failures.
+runtime. The current subset misses top-level exclusions and ordered negated
+exceptions, and it passes aliases or unsupported media types directly to --ext.
+These mismatches produce false ignores or avoidable formatter failures.
 
 ## Current state
 
 - Deno ignore handling reads only config.fmt and uses unordered some() checks.
-- The shared glob helper strips a leading ! and does not expand braces.
+- The shared glob helper strips a leading ! but lacks an exclusion-oriented
+  ordered evaluator.
 - supportedExtensions mixes CLI values, aliases, unsupported XML/SVG, and
   version-gated formats.
 - The repository supports Deno 2 without pinning a minor release; local and CI
@@ -97,7 +97,7 @@ return exclude.some((pattern) => matchesGlob(pattern, path));
 ```ts
 // src/glob.ts:2-25
 const normalized = pattern.replace(/^!/, "").replace(/^\.\//, "");
-// Handles *, **, and ?; braces are escaped as literals.
+// Handles *, **, and ?.
 ```
 
 Repository constraints to preserve:
@@ -114,7 +114,7 @@ Repository constraints to preserve:
 | -------------------------- | --------------------------------------------------- | --------------------------------------------------------------- |
 | Formatting suite           | `deno test -A main_test.ts --filter "formatSource"` | the existing top-level formatting suite and all Deno cases pass |
 | Deno capability unit tests | `deno test -A src/adapters/deno_test.ts`            | synthetic and current-runtime capability cases pass             |
-| Glob unit tests            | `deno test -A src/glob_test.ts`                     | ordered and brace cases pass                                    |
+| Glob unit tests            | `deno test -A src/glob_test.ts`                     | ordered wildcard cases pass                                     |
 | Full Deno gate             | `deno task check`                                   | exit 0                                                          |
 | Node/package parity        | `deno task coverage && deno task test:packages`     | both tasks exit 0                                               |
 
@@ -166,7 +166,7 @@ into this plan.
 ### Step 1: Build an oracle-backed compatibility table
 
 Add table-driven tests that compare projectfmt behavior with the currently
-selected Deno 2 executable for: fmt.include brace globs; top-level and fmt
+selected Deno 2 executable for: separate fmt.include globs; top-level and fmt
 excludes; and a broad exclude followed by a negated re-include. Store
 representative real configs in `tests/fixtures/deno`; direct CLI invocations
 must be local, non-mutating, and deterministic.
@@ -228,12 +228,12 @@ Steps 2 and 3 provide the passing gates for their respective behavior.
 ### Step 2: Implement ordered Deno path evaluation
 
 Replace unordered `some()` exclusion logic with an ordered evaluator that
-supports negated exceptions and brace alternatives using Deno-compatible path
-bases. Merge applicable top-level and `fmt` include/exclude policy in the same
-order Deno uses. If a maintained Deno-standard glob helper is added, pin it in
+supports negated exceptions using Deno-compatible path bases. Merge applicable
+top-level and `fmt` include/exclude policy in the same order Deno uses. If a
+maintained Deno-standard glob helper is added, pin it in
 `deno.json`/`deno.lock`; do not implement a second divergent matcher.
 
-**Verify**: `deno test -A src/glob_test.ts` → brace, directory, ordered
+**Verify**: `deno test -A src/glob_test.ts` → wildcard, directory, ordered
 negation, and non-match cases pass
 
 ### Step 3: Use an extension-to-invocation map
@@ -288,6 +288,9 @@ all commands exit 0
 
 ## Test plan
 
+- Separate include globs such as `src/**/*.ts` and `src/**/*.tsx` match both
+  suffixes. Deno 2.9.3 does not expand braces in `fmt.include`, so projectfmt
+  deliberately follows the selected runtime rather than adding an extension.
 - Top-level exclude is honored.
 - Broad exclude followed by ! exception re-includes the intended file.
 - Brace include such as src/**/*.{ts,tsx} matches both suffixes.

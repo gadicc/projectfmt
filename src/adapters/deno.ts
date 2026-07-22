@@ -1,46 +1,102 @@
 import { dirname, extname, relative, sep } from "node:path";
 
 import { parseJsonc, readTextIfPresent } from "../fs.ts";
-import { matchesGlob } from "../glob.ts";
+import { isExcluded, isIncluded } from "../glob.ts";
 import { nearestExistingDirectory } from "../path.ts";
 import { runCommand } from "../process.ts";
 import type { FormatterAdapter } from "../types.ts";
 import { configFileEvidence, packageEvidence } from "./discovery.ts";
 
 const configNames = ["deno.json", "deno.jsonc"] as const;
-const supportedExtensions = new Set([
-  "js",
-  "cjs",
-  "mjs",
-  "ts",
-  "cts",
-  "mts",
-  "jsx",
-  "tsx",
-  "md",
-  "mkd",
-  "mkdn",
-  "mdwn",
-  "mdown",
-  "markdown",
-  "json",
-  "jsonc",
-  "css",
-  "html",
-  "xml",
-  "svg",
-  "njk",
-  "vto",
-  "yml",
-  "yaml",
-  "scss",
-  "less",
-  "ipynb",
-  "astro",
-  "svelte",
-  "vue",
-  "sql",
-]);
+type ExtensionDisposition = "canonical" | "alias" | "runtime-gated";
+
+interface DenoExtensionSpec {
+  extension: string;
+  flag?: string;
+  disposition: ExtensionDisposition;
+}
+
+/** @internal Complete compatibility table for virtual destination suffixes. */
+export const denoExtensionTable: Readonly<Record<string, DenoExtensionSpec>> = {
+  js: { extension: "js", disposition: "canonical" },
+  cjs: { extension: "cjs", disposition: "canonical" },
+  mjs: { extension: "mjs", disposition: "canonical" },
+  ts: { extension: "ts", disposition: "canonical" },
+  cts: { extension: "cts", disposition: "canonical" },
+  mts: { extension: "mts", disposition: "canonical" },
+  jsx: { extension: "jsx", disposition: "canonical" },
+  tsx: { extension: "tsx", disposition: "canonical" },
+  md: { extension: "md", disposition: "canonical" },
+  mkd: { extension: "md", disposition: "alias" },
+  mkdn: { extension: "md", disposition: "alias" },
+  mdwn: { extension: "md", disposition: "alias" },
+  mdown: { extension: "md", disposition: "alias" },
+  markdown: { extension: "md", disposition: "alias" },
+  json: { extension: "json", disposition: "canonical" },
+  jsonc: { extension: "jsonc", disposition: "canonical" },
+  css: {
+    extension: "css",
+    flag: "--unstable-css",
+    disposition: "canonical",
+  },
+  html: {
+    extension: "html",
+    flag: "--unstable-html",
+    disposition: "canonical",
+  },
+  xml: { extension: "xml", disposition: "runtime-gated" },
+  svg: { extension: "svg", disposition: "runtime-gated" },
+  njk: { extension: "njk", disposition: "canonical" },
+  vto: { extension: "vto", disposition: "canonical" },
+  yml: {
+    extension: "yml",
+    flag: "--unstable-yaml",
+    disposition: "canonical",
+  },
+  yaml: {
+    extension: "yaml",
+    flag: "--unstable-yaml",
+    disposition: "canonical",
+  },
+  scss: {
+    extension: "scss",
+    flag: "--unstable-css",
+    disposition: "canonical",
+  },
+  less: {
+    extension: "less",
+    flag: "--unstable-css",
+    disposition: "canonical",
+  },
+  ipynb: { extension: "ipynb", disposition: "canonical" },
+  astro: {
+    extension: "astro",
+    flag: "--unstable-component",
+    disposition: "canonical",
+  },
+  svelte: {
+    extension: "svelte",
+    flag: "--unstable-component",
+    disposition: "canonical",
+  },
+  vue: {
+    extension: "vue",
+    flag: "--unstable-component",
+    disposition: "canonical",
+  },
+  sql: {
+    extension: "sql",
+    flag: "--unstable-sql",
+    disposition: "canonical",
+  },
+};
+
+export interface DenoFormatInvocation {
+  extension: string;
+  flags: readonly string[];
+}
+
+class DenoHelpParseError extends Error {}
 
 /** Built-in Deno fmt CLI adapter. */
 export const denoAdapter: FormatterAdapter = {
@@ -106,14 +162,7 @@ export const denoAdapter: FormatterAdapter = {
   },
 
   async format(source, context) {
-    const extension = extname(context.filePath).slice(1).toLowerCase();
-    if (!supportedExtensions.has(extension)) {
-      throw new Error(
-        `Deno fmt does not support the intended .${
-          extension || "(none)"
-        } file type`,
-      );
-    }
+    const suffix = extname(context.filePath).slice(1).toLowerCase();
     const configPath = context.configPath;
     if (configPath && await isIgnored(context.filePath, configPath)) {
       return { source, ignored: true };
@@ -122,7 +171,14 @@ export const denoAdapter: FormatterAdapter = {
       dirname(context.filePath),
       context.projectRoot,
     );
-    const args = ["fmt", "--ext", extension, "--no-editorconfig"];
+    const invocation = await resolveDenoFormatInvocation(suffix, cwd);
+    const args = [
+      "fmt",
+      "--ext",
+      invocation.extension,
+      ...invocation.flags,
+      "--no-editorconfig",
+    ];
     if (configPath) args.push("--config", configPath);
     else args.push("--no-config");
     args.push("-");
@@ -138,6 +194,79 @@ export const denoAdapter: FormatterAdapter = {
   },
 };
 
+/** @internal Build a Deno fmt invocation from runtime-advertised capabilities. */
+export function denoFormatInvocationFromHelp(
+  suffix: string,
+  help: string,
+): DenoFormatInvocation {
+  const spec = denoExtensionTable[suffix.toLowerCase()];
+  if (!spec) throw unsupportedExtension(suffix);
+  const match = help.match(
+    /--ext\s+<[^>]+>[^[]*\[possible values:\s*([^\]]+)\]/,
+  );
+  if (!match) {
+    throw new DenoHelpParseError(
+      "Could not parse advertised --ext values from deno fmt --help",
+    );
+  }
+  const extensions = new Set(
+    match[1].split(",").map((value) => value.trim()).filter(Boolean),
+  );
+  if (!extensions.has(spec.extension)) throw unsupportedExtension(suffix);
+  return {
+    extension: spec.extension,
+    flags: spec.flag && help.includes(spec.flag) ? [spec.flag] : [],
+  };
+}
+
+async function resolveDenoFormatInvocation(
+  suffix: string,
+  cwd: string,
+): Promise<DenoFormatInvocation> {
+  if (!denoExtensionTable[suffix]) throw unsupportedExtension(suffix);
+  const help = await runCommand("deno", ["fmt", "--help"], { cwd });
+  if (help.code !== 0 || help.signal) {
+    throw await denoHelpError(
+      cwd,
+      `deno fmt --help exited ${
+        help.signal ?? help.code ?? "without a status"
+      }`,
+      help.stderr || help.stdout,
+    );
+  }
+  try {
+    return denoFormatInvocationFromHelp(suffix, help.stdout);
+  } catch (cause) {
+    if (!(cause instanceof DenoHelpParseError)) throw cause;
+    throw await denoHelpError(
+      cwd,
+      cause.message,
+      help.stderr || help.stdout,
+    );
+  }
+}
+
+async function denoHelpError(
+  cwd: string,
+  message: string,
+  diagnostic: string,
+): Promise<Error> {
+  const version = await runCommand("deno", ["--version"], { cwd });
+  const label = version.stdout.trim().split("\n")[0] ||
+    version.stderr.trim() || "unknown Deno version";
+  const error = new Error(`${message} (${label})`) as Error & {
+    stderr?: string;
+  };
+  error.stderr = diagnostic;
+  return error;
+}
+
+function unsupportedExtension(suffix: string): Error {
+  return new Error(
+    `Deno fmt does not support the intended .${suffix || "(none)"} file type`,
+  );
+}
+
 async function isIgnored(
   filePath: string,
   configPath: string,
@@ -150,14 +279,12 @@ async function isIgnored(
     : {};
   const path = relative(dirname(configPath), filePath).split(sep).join("/");
   const include = stringArray(fmt.include);
-  const exclude = stringArray(fmt.exclude);
-  if (
-    include.length > 0 &&
-    !include.some((pattern) => matchesGlob(pattern, path))
-  ) {
-    return true;
-  }
-  return exclude.some((pattern) => matchesGlob(pattern, path));
+  const exclude = [
+    ...stringArray(config.exclude),
+    ...stringArray(fmt.exclude),
+  ];
+  return (include.length > 0 && !isIncluded(include, path)) ||
+    isExcluded(exclude, path);
 }
 
 function stringArray(value: unknown): string[] {

@@ -34,3 +34,12 @@ export function isIncluded(patterns: readonly string[], path: string): boolean {
   }
   return included;
 }
+
+/** Evaluate ordered exclusions, where a negated match re-includes the path. */
+export function isExcluded(patterns: readonly string[], path: string): boolean {
+  let excluded = false;
+  for (const pattern of patterns) {
+    if (matchesGlob(pattern, path)) excluded = !pattern.startsWith("!");
+  }
+  return excluded;
+}
