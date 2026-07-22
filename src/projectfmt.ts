@@ -14,10 +14,18 @@ import type {
   FormatterSelection,
 } from "./types.ts";
 
-/** Discover and probe the formatter for an intended destination path. */
-export async function resolveFormatter(
+/** Discover and probe the formatter from an absolute intended path. */
+export function resolveFormatter(
+  filePath: string,
+): Promise<FormatterResolution>;
+/** Discover and probe the formatter with explicit resolution options. */
+export function resolveFormatter(
   options: FormatSourceOptions,
+): Promise<FormatterResolution>;
+export async function resolveFormatter(
+  input: FormatSourceOptions | string,
 ): Promise<FormatterResolution> {
+  const options = normalizeOptions(input);
   const { projectRoot, filePath } = await normalizePaths(
     options.filePath,
     options.projectRoot,
@@ -156,24 +164,43 @@ export async function resolveFormatter(
   });
 }
 
-/** Format source according to the intended destination project's conventions. */
+/** Format source using project context inferred from an absolute intended path. */
+export function formatSource(
+  source: string,
+  filePath: string,
+): Promise<string>;
+/** Format source with explicit resolution and processing options. */
+export function formatSource(
+  source: string,
+  options: FormatSourceOptions,
+): Promise<string>;
 export async function formatSource(
   source: string,
-  options: FormatSourceOptions,
+  input: FormatSourceOptions | string,
 ): Promise<string> {
-  return (await formatSourceWithResult(source, options)).source;
+  return (await formatSourceWithResult(source, normalizeOptions(input))).source;
 }
 
-/** Format source and return change, ignore, and resolution diagnostics. */
-export async function formatSourceWithResult(
+/** Format source from an absolute path and return full diagnostics. */
+export function formatSourceWithResult(
+  source: string,
+  filePath: string,
+): Promise<FormatSourceResult>;
+/** Format source with explicit options and return full diagnostics. */
+export function formatSourceWithResult(
   source: string,
   options: FormatSourceOptions,
+): Promise<FormatSourceResult>;
+export async function formatSourceWithResult(
+  source: string,
+  input: FormatSourceOptions | string,
 ): Promise<FormatSourceResult> {
   if (typeof source !== "string") {
     throw new FormatterResolutionError("source must be a string", {
       code: "INVALID_OPTIONS",
     });
   }
+  const options = normalizeOptions(input);
   const resolution = await resolveFormatter(options);
   if (
     resolution.status === "disabled" ||
@@ -242,6 +269,19 @@ export async function formatSourceWithResult(
       },
     );
   }
+}
+
+function normalizeOptions(
+  input: FormatSourceOptions | string,
+): FormatSourceOptions {
+  if (typeof input === "string") return { filePath: input };
+  if (!input || typeof input !== "object") {
+    throw new FormatterResolutionError(
+      "options must be an absolute file path string or an options object",
+      { code: "INVALID_OPTIONS" },
+    );
+  }
+  return input;
 }
 
 function adapterMap(

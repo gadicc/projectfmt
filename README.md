@@ -84,7 +84,7 @@ downloads one, invokes a package manager, or contacts the network.
 
 ## API
 
-### `formatSource(source, options)`
+### `formatSource(source, optionsOrAbsolutePath)`
 
 Returns `Promise<string>`.
 
@@ -105,13 +105,18 @@ still supported when the caller needs an exact, reproducible boundary. Paths
 that escape an explicit or inferred project boundary are rejected. `strict`
 defaults to `false`.
 
-The equivalent absolute-path form can omit the boundary:
+The equivalent absolute-path shorthand uses all default options:
 
 ```ts
-await formatSource(source, {
-  filePath: "/workspace/packages/api/src/generated/answer.ts",
-});
+await formatSource(
+  source,
+  "/workspace/packages/api/src/generated/answer.ts",
+);
 ```
+
+The string shorthand must be absolute. Use the options object to supply a
+relative path, explicit boundary, formatter selection, strict mode, custom
+adapters, or processing constraints.
 
 For automatic inference, projectfmt walks upward from the intended file's
 directory. The nearest VCS root (`.git` or `.hg`) or workspace boundary wins.
@@ -145,7 +150,7 @@ behavior currently changes. Custom adapters receive the constraint as
 `context.formatOnly` and should avoid lint fixes, assists, or other cleanup when
 it is true.
 
-### `formatSourceWithResult(source, options)`
+### `formatSourceWithResult(source, optionsOrAbsolutePath)`
 
 Returns the source plus resolution diagnostics:
 
@@ -157,6 +162,8 @@ console.log(result.resolution.formatter);
 console.log(result.resolution.evidence);
 ```
 
+It accepts the same absolute-path string shorthand as `formatSource`.
+
 The result contains:
 
 - `source`, `changed`, and `ignored`;
@@ -165,7 +172,7 @@ The result contains:
 - the configuration root, all discovery evidence, ranked candidates, ambiguity
   state, and a human-readable reason.
 
-### `resolveFormatter(options)`
+### `resolveFormatter(optionsOrAbsolutePath)`
 
 Performs the same discovery and availability probing without formatting:
 
@@ -184,6 +191,12 @@ switch (resolution.status) {
   case "disabled":
     console.log(resolution.reason);
 }
+```
+
+For default resolution options, pass the absolute intended path directly:
+
+```ts
+const resolution = await resolveFormatter(absoluteOutputPath);
 ```
 
 ### `clearProjectRootCache()`

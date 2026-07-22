@@ -96,6 +96,17 @@ const resolution = await resolveFormatter({
 });
 if (resolution.status !== "disabled") throw new Error("bad resolution");
 const projectRoot = ${JSON.stringify(root)};
+const shorthand = await formatSource(
+  'const shorthand="node"',
+  ${
+      JSON.stringify(
+        join(root, "tests", "fixtures", "prettier", "shorthand.ts"),
+      )
+    },
+);
+if (shorthand !== "const shorthand = 'node'\\n") {
+  throw new Error("shorthand mismatch");
+}
 const prettier = await formatSource('const value="node"', {
   formatter: "prettier",
   filePath: "tests/fixtures/prettier/node-smoke.ts",

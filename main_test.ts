@@ -24,9 +24,9 @@ const fixture = (...parts: string[]) =>
 
 describe("resolveFormatter", () => {
   it("infers a project boundary for an absolute intended path", async () => {
-    const resolution = await resolveFormatter({
-      filePath: fixture("prettier", "src", "generated", "schema.ts"),
-    });
+    const resolution = await resolveFormatter(
+      fixture("prettier", "src", "generated", "schema.ts"),
+    );
     assertEquals(resolution.projectRoot, root);
     assertEquals(resolution.formatter, "prettier");
   });
@@ -34,6 +34,11 @@ describe("resolveFormatter", () => {
   it("requires projectRoot for a relative intended path", async () => {
     await assertRejects(
       () => resolveFormatter({ filePath: "src/generated.ts" }),
+      FormatterResolutionError,
+      "required when filePath is relative",
+    );
+    await assertRejects(
+      () => resolveFormatter("src/generated.ts"),
       FormatterResolutionError,
       "required when filePath is relative",
     );
@@ -250,6 +255,18 @@ describe("resolveFormatter", () => {
 });
 
 describe("formatSource", () => {
+  it("accepts an absolute intended path as shorthand", async () => {
+    const filePath = fixture("prettier", "src", "generated", "shorthand.ts");
+    const source = "const answer={value:42}";
+    const expected = "const answer = { value: 42 }\n";
+    assertEquals(await formatSource(source, filePath), expected);
+
+    const result = await formatSourceWithResult(source, filePath);
+    assertEquals(result.source, expected);
+    assertEquals(result.changed, true);
+    assertEquals(result.resolution.filePath, filePath);
+  });
+
   it("passes the intended TypeScript path and project configuration to Prettier", async () => {
     const output = await formatSource(
       'function value(){return {message:"hello"}}',
