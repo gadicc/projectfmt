@@ -4,7 +4,7 @@ Contributions and focused bug reports are welcome.
 
 ## Setup
 
-Install Deno 2 and Node 20 or newer, then materialize the pinned development
+Install Deno 2 and Node 22 or newer, then materialize the pinned development
 dependencies:
 
 ```sh

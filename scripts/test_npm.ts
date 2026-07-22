@@ -127,7 +127,39 @@ const deno = await formatSource('{"runtime":"node"}', {
 if (deno !== '{ "runtime": "node" }\\n') throw new Error("Deno mismatch");
 `,
   );
+  await Deno.writeTextFile(
+    join(tempDirectory, "smoke.cjs"),
+    `const { formatSource, resolveFormatter } = require("projectfmt");
+
+async function main() {
+  const source = "const  value=1";
+  const output = await formatSource(source, {
+    formatter: "none",
+    filePath: "src/generated.ts",
+    projectRoot: process.cwd(),
+  });
+  if (output !== source) throw new Error("none changed source");
+  const resolution = await resolveFormatter({
+    formatter: "none",
+    filePath: "src/generated.ts",
+    projectRoot: process.cwd(),
+  });
+  if (resolution.status !== "disabled") throw new Error("bad resolution");
+  const deno = await formatSource('{"runtime":"node-cjs"}', {
+    formatter: "deno",
+    filePath: "tests/fixtures/deno/node-smoke.json",
+    projectRoot: ${JSON.stringify(root)},
+  });
+  if (deno !== '{ "runtime": "node-cjs" }\\n') {
+    throw new Error("Deno mismatch");
+  }
+}
+
+main();
+`,
+  );
   await run("node", ["smoke.mjs"], tempDirectory);
+  await run("node", ["smoke.cjs"], tempDirectory);
   console.log(`npm tarball smoke passed: ${packed[0].filename}`);
 } finally {
   await Deno.remove(tempDirectory, { recursive: true });

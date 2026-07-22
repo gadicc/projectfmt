@@ -81,7 +81,7 @@ const npmBuild = build({
       "monorepo",
       "typescript",
     ],
-    engines: { node: ">=20.0.0" },
+    engines: { node: ">=22.0.0" },
     peerDependencies: {
       "@biomejs/biome": denoJson.imports["@biomejs/biome"].split("@").pop()!,
       "prettier": denoJson.imports.prettier.split("@").pop()!,

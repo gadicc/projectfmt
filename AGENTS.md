@@ -23,7 +23,7 @@ path, and a project boundary. Preserve aligned behavior across Deno and Node.
 
 ## Development
 
-Use Deno 2 and Node 20 or newer. Materialize pinned dependencies with:
+Use Deno 2 and Node 22 or newer. Materialize pinned dependencies with:
 
 ```sh
 deno install --frozen

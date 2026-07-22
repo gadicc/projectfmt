@@ -24,7 +24,7 @@ they do not authorize production feature delivery.
 | [007](007-use-effective-biome-config.md)        | Characterize authoritative Biome tool activation   | P1       | M      | 002, 004, 006           | DONE   |
 | [008](008-fix-deno-import-docs.md)              | Show runtime-correct Deno imports                  | P1       | S      | —                       | DONE   |
 | [009](009-pin-github-actions.md)                | Pin privileged GitHub Actions immutably            | P1       | S      | —                       | DONE   |
-| [010](010-test-npm-modes-and-supported-node.md) | Test npm loading modes and supported Node releases | P2       | M      | 003, 006, 009           | TODO   |
+| [010](010-test-npm-modes-and-supported-node.md) | Test npm loading modes and supported Node releases | P2       | M      | 003, 006, 009           | DONE   |
 | [011](011-canonicalize-symlinked-roots.md)      | Canonicalize symlinked package boundaries          | P2       | M      | 001                     | TODO   |
 | [012](012-parse-jsonc-safely.md)                | Preserve strings while parsing JSONC               | P2       | S      | —                       | TODO   |
 | [013](013-validate-custom-adapters.md)          | Validate and wrap custom-adapter lifecycles        | P2       | M      | 001, 002                | TODO   |

@@ -31,6 +31,22 @@ jobs:
           files: ./coverage.lcov
           use_oidc: true
 
+  npm-smoke:
+    name: npm smoke (Node ${{ matrix.node-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Audited 2026-07-22 against https://nodejs.org/en/about/previous-releases
+        node-version: [22, 24, 26]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: deno task build:npm
+      - run: deno task test:npm
+
   platforms:
     name: Runtime smoke (${{ matrix.os }})
     strategy:

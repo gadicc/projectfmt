@@ -7,7 +7,7 @@
   "nodeModulesDir": "auto",
   "tasks": {
     "build:npm": "deno run -A scripts/build_npm.ts",
-    "check": "deno fmt --check && deno task lint && deno task typecheck && deno task doclint && deno task test",
+    "check": "deno fmt --check && deno task lint && deno task typecheck && deno task doclint && deno task test:ci-config && deno task test",
     "check:ci": "deno task check && deno task coverage",
     "coverage": "deno task build:npm --test-internals && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.lcov scripts/node_coverage.mjs",
     "doclint": "deno doc --lint main.ts",
@@ -16,6 +16,7 @@
     "pre-commit": "deno task lint && deno task typecheck && deno task doclint && deno task test && deno task fmt",
     "release": "./node_modules/.bin/semantic-release",
     "test": "deno test -A --parallel",
+    "test:ci-config": "deno run --allow-read=.github scripts/test_ci_config.ts",
     "test:jsr": "deno publish --dry-run --allow-dirty",
     "test:npm": "deno run -A scripts/test_npm.ts",
     "test:packages": "deno task test:jsr && deno task build:npm && deno task test:npm",
