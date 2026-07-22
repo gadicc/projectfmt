@@ -111,8 +111,9 @@ paths without `projectRoot` are rejected rather than interpreted against the
 process's current working directory. An absolute path may omit `projectRoot`, in
 which case projectfmt infers it. Supplying `projectRoot` for an absolute path is
 still supported when the caller needs an exact, reproducible boundary. Paths
-that escape an explicit or inferred project boundary are rejected. `strict`
-defaults to `false`.
+that escape an explicit or inferred project boundary are rejected, as is an
+intended path equal to `projectRoot`: the intended path must name a descendant
+file. `strict` defaults to `false`.
 
 The equivalent absolute-path shorthand uses all default options:
 

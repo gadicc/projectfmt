@@ -54,6 +54,25 @@ describe("resolveFormatter", () => {
     assertEquals(resolution.projectRoot, projectRoot);
   });
 
+  it("rejects an intended path equal to projectRoot", async () => {
+    const parent = await Deno.makeTempDir({ prefix: "projectfmt boundary " });
+    const projectRoot = join(parent, "project");
+    try {
+      await Deno.mkdir(projectRoot);
+      await Deno.writeTextFile(join(parent, ".prettierrc"), "{}");
+      const error = await assertRejects(
+        () => resolveFormatter({ filePath: projectRoot, projectRoot }),
+        FormatterResolutionError,
+        "file below projectRoot",
+      );
+      assertEquals(error.code, "INVALID_OPTIONS");
+      assertEquals(error.filePath, projectRoot);
+      assertEquals(error.projectRoot, projectRoot);
+    } finally {
+      await Deno.remove(parent, { recursive: true });
+    }
+  });
+
   it("prefers a workspace boundary over a nested package marker", async () => {
     const directory = await Deno.makeTempDir({
       prefix: "projectfmt workspace ",

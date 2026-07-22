@@ -15,7 +15,7 @@ they do not authorize production feature delivery.
 
 | Plan                                            | Title                                              | Priority | Effort | Depends on              | Status |
 | ----------------------------------------------- | -------------------------------------------------- | -------- | ------ | ----------------------- | ------ |
-| [001](001-reject-root-as-file.md)               | Reject an intended path equal to projectRoot       | P1       | S      | —                       | TODO   |
+| [001](001-reject-root-as-file.md)               | Reject an intended path equal to projectRoot       | P1       | S      | —                       | DONE   |
 | [002](002-bound-native-config-lookup.md)        | Bound formatter-owned configuration lookup         | P1       | L      | 001                     | TODO   |
 | [003](003-handle-subprocess-stdin-errors.md)    | Handle subprocess stdin failures safely            | P1       | M      | —                       | TODO   |
 | [004](004-correct-biome-lifecycle.md)           | Make Biome lifecycle outcomes truthful             | P1       | M      | 003                     | TODO   |

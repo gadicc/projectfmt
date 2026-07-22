@@ -88,11 +88,17 @@ export async function normalizePaths(
   const root = projectRoot === undefined
     ? (await inferProjectRoot(target)).root
     : resolve(projectRoot);
-  const fromRoot = relative(root, target);
-  if (
-    fromRoot === ".." || fromRoot.startsWith(`..${sep}`) ||
-    isAbsolute(fromRoot)
-  ) {
+  if (target === root) {
+    throw new FormatterResolutionError(
+      `Intended path must name a file below projectRoot: ${filePath}`,
+      {
+        code: "INVALID_OPTIONS",
+        filePath: target,
+        projectRoot: root,
+      },
+    );
+  }
+  if (!isWithinProjectRoot(target, root)) {
     throw new FormatterResolutionError(
       `Intended file path must stay within projectRoot: ${filePath}`,
       {
@@ -279,13 +285,23 @@ export function ancestorDirectories(
 ): string[] {
   const directories: string[] = [];
   let current = dirname(filePath);
+  if (!isWithinProjectRoot(current, projectRoot)) return directories;
   while (true) {
     directories.push(current);
     if (current === projectRoot) return directories;
     const parent = dirname(current);
-    if (parent === current) return directories;
+    if (parent === current || !isWithinProjectRoot(parent, projectRoot)) {
+      return directories;
+    }
     current = parent;
   }
+}
+
+function isWithinProjectRoot(path: string, projectRoot: string): boolean {
+  const fromRoot = relative(projectRoot, path);
+  return fromRoot === "" ||
+    (!isAbsolute(fromRoot) && fromRoot !== ".." &&
+      !fromRoot.startsWith(`..${sep}`));
 }
 
 export async function nearestExistingDirectory(
