@@ -1,9 +1,5 @@
-import {
-  assert,
-  assertEquals,
-  assertInstanceOf,
-  assertRejects,
-} from "@std/assert";
+import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 
 import { FormatterExecutionError } from "./errors.ts";
@@ -163,10 +159,9 @@ Deno.test("a format call snapshots its probed Prettier implementation", async ()
     const services: OperationServices = {
       ...defaultOperationServices,
       async afterProbe(operation) {
-        assert(
-          operation.resolution.availability?.implementation?.startsWith(
-            original,
-          ),
+        assertEquals(
+          operation.resolution.availability?.implementation,
+          await realpath(join(original, "index.mjs")),
         );
         await Deno.remove(packageLink);
         await linkDirectory(replacement, packageLink);

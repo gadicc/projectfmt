@@ -593,7 +593,7 @@ export async function format(source) { return "formatted:" + source; }
         projectRoot,
       );
       const cliPath = await realpath(join(cliRoot, cli.executable));
-      const fromRoot = relative(projectRoot, cliPath);
+      const fromRoot = relative(await realpath(projectRoot), cliPath);
       assert(
         !isAbsolute(fromRoot) && fromRoot !== ".." &&
           !fromRoot.startsWith(`..${sep}`),

@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 
 import { resolveProjectPackage } from "./package.ts";
@@ -41,7 +42,7 @@ Deno.test("resolveProjectPackage accepts a local package through a symlinked roo
         join(linkedRoot, "src"),
         linkedRoot,
       ),
-      packageEntry,
+      await realpath(packageEntry),
     );
   } finally {
     await Deno.remove(parent, { recursive: true });

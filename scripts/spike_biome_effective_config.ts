@@ -121,8 +121,14 @@ async function observe(
     stderr: "piped",
   }).spawn();
   const writer = child.stdin.getWriter();
-  await writer.write(new TextEncoder().encode(row.source));
-  await writer.close();
+  try {
+    await writer.write(new TextEncoder().encode(row.source));
+    await writer.close();
+  } catch (error) {
+    if (!(error instanceof Deno.errors.BrokenPipe)) throw error;
+  } finally {
+    writer.releaseLock();
+  }
   const output = await child.output();
   const stdout = new TextDecoder().decode(output.stdout);
   const stderr = new TextDecoder().decode(output.stderr);
