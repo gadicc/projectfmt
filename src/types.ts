@@ -130,9 +130,9 @@ export interface FormatterResolution {
 
 /** Options shared by formatting and diagnostic resolution APIs. */
 export interface FormatSourceOptions {
-  /** Intended destination path, relative to projectRoot or absolute within it. */
+  /** Intended destination path. Relative paths require projectRoot. */
   filePath: string;
-  /** Boundary for discovery and package resolution. Defaults to cwd. */
+  /** Boundary for discovery and package resolution. Inferred for absolute paths. */
   projectRoot?: string;
   /** Defaults to auto. */
   formatter?: FormatterSelection;

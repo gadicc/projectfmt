@@ -8,8 +8,9 @@ Copyright (c) 2015 by Gadi Cohen. [MIT Licensed](/LICENSE.txt).
 
 `projectfmt` is a project-aware formatter broker for code generators and
 libraries. Give it source text, the path where that source is intended to live,
-and a project boundary. It discovers and invokes the formatter already chosen by
-that project—without writing a temporary file.
+and either an explicit project boundary or an absolute path from which one can
+be inferred. It discovers and invokes the formatter already chosen by that
+project—without writing a temporary file.
 
 ```ts
 import { formatSource } from "projectfmt";
@@ -96,9 +97,33 @@ const output = await formatSource("export const answer=42", {
 });
 ```
 
-`filePath` may be relative to `projectRoot` or absolute within it. Paths that
-escape the project boundary are rejected. `projectRoot` defaults to the current
-working directory. `strict` defaults to `false`.
+`filePath` may be relative to an explicit `projectRoot` or absolute. Relative
+paths without `projectRoot` are rejected rather than interpreted against the
+process's current working directory. An absolute path may omit `projectRoot`, in
+which case projectfmt infers it. Supplying `projectRoot` for an absolute path is
+still supported when the caller needs an exact, reproducible boundary. Paths
+that escape an explicit or inferred project boundary are rejected. `strict`
+defaults to `false`.
+
+The equivalent absolute-path form can omit the boundary:
+
+```ts
+await formatSource(source, {
+  filePath: "/workspace/packages/api/src/generated/answer.ts",
+});
+```
+
+For automatic inference, projectfmt walks upward from the intended file's
+directory. The nearest VCS root (`.git` or `.hg`) or workspace boundary wins.
+Recognized workspaces include pnpm, Lerna, Rush, `package.json#workspaces`, and
+Deno workspaces. If none exists, the nearest package, Deno, JSR, lockfile, or
+supported formatter configuration is used. Inference errors instead of using the
+filesystem root when no defensible project marker exists.
+
+Inferred roots are cached for traversed directories at or below the detected
+root, so later files in the same package or workspace reuse the result. Call
+`clearProjectRootCache()` if a long-running process changes project topology,
+such as creating or removing a workspace or VCS boundary.
 
 Biome automatically runs the equivalent of
 `biome check --write --stdin-file-path=...`. This applies the repository's
@@ -161,6 +186,12 @@ switch (resolution.status) {
 }
 ```
 
+### `clearProjectRootCache()`
+
+Clears roots cached by automatic inference. Explicit `projectRoot` calls do not
+use this cache. Formatter evidence, configuration, and availability are not
+cached.
+
 ### Custom adapters
 
 Additional adapters use the same discovery/probe/format lifecycle as built-ins:
@@ -192,7 +223,8 @@ await formatSource(source, {
 ```
 
 Adapter names must be unique. Custom adapters define their own source-processing
-behavior.
+behavior. Because automatic root inference cannot know custom project markers,
+callers using custom adapters should normally provide `projectRoot` explicitly.
 
 ## Resolution rules
 
@@ -249,7 +281,8 @@ Prettier configuration and plugins are JavaScript modules and can execute code
 when loaded. The Biome adapter executes the project's pinned native binary, and
 the Deno adapter executes the `deno` binary on `PATH`. This is the same broad
 trust boundary as running those project formatters directly. `projectRoot` is a
-discovery and module-resolution boundary, not a sandbox.
+discovery and module-resolution boundary, not a sandbox. Provide it explicitly
+when automatic inference would grant a broader boundary than the caller intends.
 
 The library itself performs no network access or installation. Deno callers must
 grant the filesystem, environment, and subprocess permissions required to

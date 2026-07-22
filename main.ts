@@ -3,6 +3,7 @@ export {
   formatSourceWithResult,
   resolveFormatter,
 } from "./src/projectfmt.ts";
+export { clearProjectRootCache } from "./src/path.ts";
 export {
   FormatterExecutionError,
   FormatterResolutionError,

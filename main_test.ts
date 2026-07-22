@@ -6,9 +6,10 @@ import {
   assertStringIncludes,
 } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 
 import {
+  clearProjectRootCache,
   formatSource,
   formatSourceWithResult,
   type FormatterAdapter,
@@ -22,6 +23,120 @@ const fixture = (...parts: string[]) =>
   join(root, "tests", "fixtures", ...parts);
 
 describe("resolveFormatter", () => {
+  it("infers a project boundary for an absolute intended path", async () => {
+    const resolution = await resolveFormatter({
+      filePath: fixture("prettier", "src", "generated", "schema.ts"),
+    });
+    assertEquals(resolution.projectRoot, root);
+    assertEquals(resolution.formatter, "prettier");
+  });
+
+  it("requires projectRoot for a relative intended path", async () => {
+    await assertRejects(
+      () => resolveFormatter({ filePath: "src/generated.ts" }),
+      FormatterResolutionError,
+      "required when filePath is relative",
+    );
+  });
+
+  it("retains an explicit boundary for an absolute intended path", async () => {
+    const projectRoot = fixture("prettier");
+    const resolution = await resolveFormatter({
+      formatter: "none",
+      filePath: join(projectRoot, "src", "generated.ts"),
+      projectRoot,
+    });
+    assertEquals(resolution.projectRoot, projectRoot);
+  });
+
+  it("prefers a workspace boundary over a nested package marker", async () => {
+    const directory = await Deno.makeTempDir({
+      prefix: "projectfmt workspace ",
+    });
+    const packageDirectory = join(directory, "packages", "api");
+    try {
+      await Deno.mkdir(packageDirectory, { recursive: true });
+      await Deno.writeTextFile(
+        join(directory, "package.json"),
+        JSON.stringify({ workspaces: ["packages/*"] }),
+      );
+      await Deno.writeTextFile(join(packageDirectory, "package.json"), "{}");
+      const resolution = await resolveFormatter({
+        formatter: "none",
+        filePath: join(packageDirectory, "src", "generated.ts"),
+      });
+      assertEquals(resolution.projectRoot, directory);
+    } finally {
+      clearProjectRootCache();
+      await Deno.remove(directory, { recursive: true });
+    }
+  });
+
+  it("prefers a surrounding VCS boundary over a nested project marker", async () => {
+    const directory = await Deno.makeTempDir({ prefix: "projectfmt root " });
+    const nested = join(directory, "nested");
+    try {
+      await Deno.mkdir(nested);
+      await Deno.writeTextFile(join(directory, ".git"), "gitdir: elsewhere");
+      await Deno.writeTextFile(join(nested, "package.json"), "{}");
+      const resolution = await resolveFormatter({
+        formatter: "none",
+        filePath: join(nested, "src", "generated.ts"),
+      });
+      assertEquals(resolution.projectRoot, directory);
+    } finally {
+      clearProjectRootCache();
+      await Deno.remove(directory, { recursive: true });
+    }
+  });
+
+  it("rejects automatic inference without a defensible project marker", async () => {
+    const filePath = join(
+      parse(root).root,
+      `projectfmt-unrooted-${crypto.randomUUID()}`,
+      "src",
+      "generated.ts",
+    );
+    await assertRejects(
+      () => resolveFormatter({ formatter: "none", filePath }),
+      FormatterResolutionError,
+      "Could not infer projectRoot",
+    );
+    clearProjectRootCache();
+  });
+
+  it("can clear cached roots after the project structure changes", async () => {
+    const directory = await Deno.makeTempDir({ prefix: "projectfmt cached " });
+    const nested = join(directory, "projects", "nested");
+    const gitMarker = join(nested, ".git");
+    const filePath = join(nested, "src", "generated.ts");
+    try {
+      await Deno.mkdir(nested, { recursive: true });
+      await Deno.writeTextFile(
+        join(directory, "package.json"),
+        JSON.stringify({ workspaces: ["projects/*"] }),
+      );
+      await Deno.writeTextFile(gitMarker, "gitdir: elsewhere");
+      assertEquals(
+        (await resolveFormatter({ formatter: "none", filePath })).projectRoot,
+        nested,
+      );
+      await Deno.remove(gitMarker);
+      assertEquals(
+        (await resolveFormatter({ formatter: "none", filePath })).projectRoot,
+        nested,
+      );
+      clearProjectRootCache();
+      assertEquals(
+        (await resolveFormatter({ formatter: "none", filePath })).projectRoot,
+        directory,
+      );
+    } finally {
+      clearProjectRootCache();
+      await Deno.remove(directory, { recursive: true });
+    }
+  });
+
   it("detects a Deno formatter task as project evidence", async () => {
     const resolution = await resolveFormatter({
       filePath: "src/generated/root.ts",

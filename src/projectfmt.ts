@@ -18,7 +18,7 @@ import type {
 export async function resolveFormatter(
   options: FormatSourceOptions,
 ): Promise<FormatterResolution> {
-  const { projectRoot, filePath } = normalizePaths(
+  const { projectRoot, filePath } = await normalizePaths(
     options.filePath,
     options.projectRoot,
   );
