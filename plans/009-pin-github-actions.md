@@ -114,15 +114,17 @@ Repository constraints to preserve:
 
 ## Steps
 
-### Step 1: Resolve and verify official tag commits
+### Step 1: Resolve and verify official reference commits
 
 This step requires outbound access to `api.github.com` and an authenticated
 GitHub CLI session. Run `gh auth status` first. If authentication or API access
 is unavailable, STOP; do not copy SHAs from search results or third-party pages.
 
-Use this exact Bash function. It resolves a lightweight tag directly and follows
-one or more annotated tag objects until the official GitHub API returns a
-commit:
+Use this exact Bash function for the three major tags. It resolves a lightweight
+tag directly and follows one or more annotated tag objects until the official
+GitHub API returns a commit. `denoland/setup-deno` publishes immutable `v2.0.x`
+tags but exposes its mutable `v2` major as a branch, so resolve that official
+branch separately and subject its target to the same commit verification:
 
 ```sh
 set -euo pipefail
@@ -144,8 +146,11 @@ resolve_tag_commit() {
 
 CHECKOUT_SHA="$(resolve_tag_commit actions/checkout v7)"
 NODE_SHA="$(resolve_tag_commit actions/setup-node v6)"
-DENO_SHA="$(resolve_tag_commit denoland/setup-deno v2)"
 CODECOV_SHA="$(resolve_tag_commit codecov/codecov-action v7)"
+DENO_SHA="$(
+  gh api "repos/denoland/setup-deno/git/ref/heads/v2" \
+    --jq 'select(.object.type == "commit") | .object.sha'
+)"
 
 printf '%s\n' "$CHECKOUT_SHA" "$NODE_SHA" "$DENO_SHA" "$CODECOV_SHA" |
   awk 'length($0) != 40 || $0 !~ /^[0-9a-f]+$/ { exit 1 } END { if (NR != 4) exit 1 }'
@@ -182,7 +187,7 @@ verify_action_commit codecov/codecov-action "$CODECOV_SHA"
 ```
 
 **Verify**: the resolver/validation block and all four official-repository
-verifications exit 0; the resolver prints exactly four lowercase 40-character
+verifications exit 0; resolution prints exactly four lowercase 40-character
 SHAs, every lookup returns the same SHA from the named official repository, and
 every `.commit.verification.verified` value is `true`. A false or missing
 verification result is a STOP condition requiring maintainer review, not
