@@ -6,8 +6,12 @@ import { dirname, join, relative, sep } from "node:path";
 import { parseJsonc, readTextIfPresent } from "../fs.ts";
 import { isIncluded } from "../glob.ts";
 import { resolveProjectPackage } from "../package.ts";
-import { runCommand } from "../process.ts";
-import type { AdapterContext, FormatterAdapter } from "../types.ts";
+import { type CommandResult, runCommand } from "../process.ts";
+import type {
+  AdapterAvailability,
+  AdapterContext,
+  FormatterAdapter,
+} from "../types.ts";
 import { configFileEvidence, packageEvidence } from "./discovery.ts";
 
 const configNames = ["biome.json", "biome.jsonc"] as const;
@@ -21,7 +25,7 @@ export const biomeAdapter: FormatterAdapter = {
     return [
       ...await configFileEvidence("biome", directory, configNames),
       ...await packageEvidence("biome", directory, {
-        packages: ["@biomejs/biome", "@biomejs/js-api"],
+        packages: ["@biomejs/biome"],
         commandPattern:
           /(?:^|[\s;&|])(?:npx\s+|pnpm\s+(?:exec\s+)?|yarn\s+|bunx\s+)?biome(?:\s|$)/,
       }),
@@ -37,8 +41,10 @@ export const biomeAdapter: FormatterAdapter = {
       };
     }
     try {
-      const version = await biomeVersion(implementation, context);
-      return { available: true, implementation, version };
+      const result = await runCommand(implementation, ["--version"], {
+        cwd: context.configRoot,
+      });
+      return biomeAvailabilityFromVersionResult(implementation, result);
     } catch (cause) {
       return {
         available: false,
@@ -56,7 +62,7 @@ export const biomeAdapter: FormatterAdapter = {
     return await withBiomeConfig(context.configPath, async (configPath) => {
       const fileBehavior = await biomeFileBehavior(context);
       if (fileBehavior.ignored) return { source, ignored: true };
-      if (!context.formatOnly && fileBehavior.formatterActive) {
+      if (!context.formatOnly) {
         // Biome's stdin check --write currently succeeds silently on parse
         // errors. Validate in memory first, but let check process the original
         // source so its fix/format ordering remains authoritative.
@@ -84,9 +90,10 @@ export const biomeAdapter: FormatterAdapter = {
         context,
         source,
       );
+      const ignored = isIgnoredMessage(result.stderr);
       return {
-        source: result.stdout || source,
-        ignored: isIgnoredMessage(result.stderr),
+        source: ignored ? source : result.stdout,
+        ignored,
         stderr: result.stderr || undefined,
       };
     });
@@ -182,15 +189,25 @@ function resolveBiome(context: AdapterContext): string | null {
   return null;
 }
 
-async function biomeVersion(
+/** @internal Test seam for Biome version-probe lifecycle outcomes. */
+export function biomeAvailabilityFromVersionResult(
   implementation: string,
-  context: AdapterContext,
-): Promise<string | undefined> {
-  const result = await runCommand(implementation, ["--version"], {
-    cwd: context.configRoot,
-  });
-  const match = result.stdout.match(/\d+\.\d+\.\d+(?:-[\w.-]+)?/);
-  return match?.[0];
+  result: CommandResult,
+): AdapterAvailability {
+  if (result.code !== 0 || result.signal) {
+    const status = result.signal ?? result.code ?? "without a status";
+    const stderr = result.stderr.trim();
+    return {
+      available: false,
+      implementation,
+      reason: `Biome --version exited ${status}${stderr ? `: ${stderr}` : ""}`,
+    };
+  }
+  return {
+    available: true,
+    implementation,
+    version: result.stdout.match(/\d+\.\d+\.\d+(?:-[\w.-]+)?/)?.[0],
+  };
 }
 
 function isIgnoredMessage(stderr: string): boolean {

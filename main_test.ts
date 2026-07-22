@@ -257,6 +257,18 @@ describe("resolveFormatter", () => {
     );
   });
 
+  it("does not treat the unsupported Biome JS API as CLI evidence", async () => {
+    const resolution = await resolveFormatter({
+      filePath: "tests/fixtures/biome-js-api/generated.ts",
+      projectRoot: root,
+    });
+    assertEquals(resolution.formatter, "prettier");
+    assertEquals(
+      resolution.evidence.some((item) => item.formatter === "biome"),
+      false,
+    );
+  });
+
   it("uses deterministic precedence and reports equal-ranked ambiguity", async () => {
     const options = {
       filePath: "tests/fixtures/ambiguous/generated.ts",
@@ -576,6 +588,37 @@ describe("formatSource", () => {
     });
     assertEquals(formatOnly.source, source);
     assertEquals(formatOnly.ignored, true);
+  });
+
+  it("rejects malformed source on a Biome lint-only path", async () => {
+    const error = await assertRejects(
+      () =>
+        formatSource("const =", {
+          formatter: "biome",
+          filePath: "tests/fixtures/biome/src/lint-only/broken.ts",
+          projectRoot: root,
+        }),
+      FormatterExecutionError,
+    );
+    assertEquals(error.code, "FORMATTER_FAILED");
+    assertInstanceOf(error.cause, Error);
+    assert((error.stderr?.length ?? 0) > 0);
+  });
+
+  it("preserves successful empty Biome output in both modes", async () => {
+    for (const formatOnly of [false, true]) {
+      for (const source of ["", "   \n\t"]) {
+        const result = await formatSourceWithResult(source, {
+          formatter: "biome",
+          filePath: "tests/fixtures/biome/src/generated/blank.ts",
+          projectRoot: root,
+          formatOnly,
+        });
+        assertEquals(result.source, "");
+        assertEquals(result.changed, source.length > 0);
+        assertEquals(result.ignored, false);
+      }
+    }
   });
 
   it("runs Deno fmt with configuration and intended JSON file type", async () => {

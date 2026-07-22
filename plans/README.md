@@ -18,7 +18,7 @@ they do not authorize production feature delivery.
 | [001](001-reject-root-as-file.md)               | Reject an intended path equal to projectRoot       | P1       | S      | —                       | DONE   |
 | [002](002-bound-native-config-lookup.md)        | Bound formatter-owned configuration lookup         | P1       | L      | 001                     | DONE   |
 | [003](003-handle-subprocess-stdin-errors.md)    | Handle subprocess stdin failures safely            | P1       | M      | —                       | DONE   |
-| [004](004-correct-biome-lifecycle.md)           | Make Biome lifecycle outcomes truthful             | P1       | M      | 003                     | TODO   |
+| [004](004-correct-biome-lifecycle.md)           | Make Biome lifecycle outcomes truthful             | P1       | M      | 003                     | DONE   |
 | [005](005-match-deno-virtual-file-semantics.md) | Match Deno virtual-file semantics                  | P1       | M      | 002, 003                | TODO   |
 | [006](006-align-config-discovery.md)            | Align configuration discovery and precedence       | P1       | M      | 001, 002                | TODO   |
 | [007](007-use-effective-biome-config.md)        | Characterize authoritative Biome tool activation   | P1       | M      | 002, 004, 006           | TODO   |
