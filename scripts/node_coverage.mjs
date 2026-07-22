@@ -11,8 +11,10 @@ import {
   FormatterResolutionError,
   resolveFormatter,
 } from "../npm/esm/main.js";
+import { runCommand } from "../npm/esm/scripts/node_process_harness.js";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const largeInput = "x".repeat(8 * 1024 * 1024);
 
 async function copyPackage(source, packageName, destinationRoot) {
   const destination = join(
@@ -23,6 +25,16 @@ async function copyPackage(source, packageName, destinationRoot) {
   await mkdir(dirname(destination), { recursive: true });
   await cp(source, destination, { recursive: true, dereference: true });
 }
+
+test("the generated process wrapper handles early stdin closure", async () => {
+  const result = await runCommand(
+    process.execPath,
+    ["-e", "process.exit(9)"],
+    { cwd: projectRoot, input: largeInput },
+  );
+  assert.equal(result.code, 9);
+  assert.equal(result.signal, null);
+});
 
 test("the generated Node entry exercises the public resolution paths", async () => {
   const disabled = await formatSource("const  value=1", {

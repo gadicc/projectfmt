@@ -9,7 +9,7 @@
     "build:npm": "deno run -A scripts/build_npm.ts",
     "check": "deno fmt --check && deno task lint && deno task typecheck && deno task doclint && deno task test",
     "check:ci": "deno task check && deno task coverage",
-    "coverage": "deno task build:npm && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.lcov scripts/node_coverage.mjs",
+    "coverage": "deno task build:npm --test-internals && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.lcov scripts/node_coverage.mjs",
     "doclint": "deno doc --lint main.ts",
     "fmt": "deno fmt",
     "lint": "deno lint",

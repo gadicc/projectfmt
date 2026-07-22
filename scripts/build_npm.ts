@@ -5,6 +5,11 @@ import denoJson from "../deno.json" with { type: "json" };
 
 const repositoryRoot = Deno.cwd();
 const outputDirectory = join(repositoryRoot, "npm");
+const testInternals = Deno.args.length === 1 &&
+  Deno.args[0] === "--test-internals";
+if (Deno.args.length > 0 && !testInternals) {
+  throw new Error(`Unknown build_npm argument: ${Deno.args.join(" ")}`);
+}
 const stagingDirectory = await Deno.makeTempDir({
   prefix: ".projectfmt-npm-",
 });
@@ -36,7 +41,16 @@ async function copyDirectory(
 }
 
 const npmBuild = build({
-  entryPoints: ["./main.ts"],
+  entryPoints: [
+    "./main.ts",
+    ...(testInternals
+      ? [{
+        name: "./__test__/process",
+        path: "./scripts/node_process_harness.ts",
+        kind: "export" as const,
+      }]
+      : []),
+  ],
   outDir: stagingDirectory,
   importMap: "deno.json",
   shims: { deno: false },
@@ -86,6 +100,37 @@ const npmBuild = build({
       types: "./esm/main.d.ts",
       ...packageJson.exports["."],
     };
+    const harnessPath = join(
+      stagingDirectory,
+      "esm",
+      "scripts",
+      "node_process_harness.js",
+    );
+    const harnessExport = packageJson.exports["./__test__/process"];
+    let harnessExists = true;
+    try {
+      if (!Deno.statSync(harnessPath).isFile) harnessExists = false;
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) harnessExists = false;
+      else throw error;
+    }
+    if (testInternals) {
+      if (!harnessExists) {
+        throw new Error(`Expected generated test harness at ${harnessPath}`);
+      }
+      if (
+        !harnessExport || typeof harnessExport !== "object" ||
+        harnessExport.import !== "./esm/scripts/node_process_harness.js"
+      ) {
+        throw new Error(
+          "Generated package is missing ./__test__/process import export",
+        );
+      }
+    } else if (harnessExists || harnessExport !== undefined) {
+      throw new Error(
+        "Ordinary npm build unexpectedly exposed the test harness",
+      );
+    }
     Deno.writeTextFileSync(
       packageJsonPath,
       `${JSON.stringify(packageJson, null, 2)}\n`,

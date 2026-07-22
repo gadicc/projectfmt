@@ -689,6 +689,8 @@ describe("formatSource", () => {
         }),
       FormatterExecutionError,
     );
+    assertEquals(biomeError.code, "FORMATTER_FAILED");
+    assertInstanceOf(biomeError.cause, Error);
     assert((biomeError.stderr?.length ?? 0) > 0);
   });
 
