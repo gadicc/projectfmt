@@ -50,6 +50,12 @@ async function copyPackageDirectory(
   return destination;
 }
 
+async function linkDirectory(target: string, path: string): Promise<void> {
+  await Deno.symlink(target, path, {
+    type: Deno.build.os === "windows" ? "junction" : "dir",
+  });
+}
+
 function biomeCliPackage(): { name: string; executable: string } {
   const names: Record<string, Partial<Record<string, string>>> = {
     darwin: { arm64: "cli-darwin-arm64", x64: "cli-darwin-x64" },
@@ -477,6 +483,56 @@ describe("formatSource", () => {
     } finally {
       await Deno.remove(parent, { recursive: true });
       await assertRejects(() => Deno.stat(parent), Deno.errors.NotFound);
+    }
+  });
+
+  it("loads a project-local Prettier implementation through a symlinked root", async () => {
+    const parent = await Deno.makeTempDir({
+      prefix: "projectfmt prettier symlink ",
+    });
+    const physicalRoot = join(parent, "physical");
+    const linkedRoot = join(parent, "linked");
+    const prettierRoot = join(physicalRoot, "node_modules", "prettier");
+    try {
+      await Deno.mkdir(prettierRoot, { recursive: true });
+      await Deno.writeTextFile(join(physicalRoot, ".prettierrc"), "{}");
+      await Deno.writeTextFile(
+        join(prettierRoot, "package.json"),
+        JSON.stringify({
+          name: "prettier",
+          version: "0.0.0-test",
+          type: "module",
+          main: "index.mjs",
+        }),
+      );
+      await Deno.writeTextFile(
+        join(prettierRoot, "index.mjs"),
+        `export const version = "0.0.0-test";
+export async function resolveConfig() { return {}; }
+export async function getFileInfo() {
+  return { ignored: false, inferredParser: "typescript" };
+}
+export async function format(source) { return "formatted:" + source; }
+`,
+      );
+      await linkDirectory(physicalRoot, linkedRoot);
+
+      const result = await formatSourceWithResult("const value=1", {
+        formatter: "prettier",
+        filePath: "src/generated.ts",
+        projectRoot: linkedRoot,
+      });
+
+      assertEquals(result.source, "formatted:const value=1");
+      assertEquals(result.resolution.status, "selected");
+      assertEquals(result.resolution.projectRoot, linkedRoot);
+      assertEquals(result.resolution.configRoot, linkedRoot);
+      assertEquals(
+        result.resolution.filePath,
+        join(linkedRoot, "src", "generated.ts"),
+      );
+    } finally {
+      await Deno.remove(parent, { recursive: true });
     }
   });
 
