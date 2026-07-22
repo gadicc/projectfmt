@@ -1,0 +1,4 @@
+interface:
+  display_name: "Projectfmt"
+  short_description: "Format generated source using project conventions"
+  default_prompt: "Use $projectfmt to integrate project-aware formatting into this code generator."

@@ -103,6 +103,15 @@ The destination project is expected to already provide its formatter:
 All formatter integrations are optional. `projectfmt` never installs or
 downloads one, invokes a package manager, or contacts the network.
 
+## Agent skill
+
+Install the bundled `projectfmt` skill to help coding agents integrate the
+library correctly:
+
+```sh
+npx skills add https://github.com/gadicc/projectfmt --skill projectfmt
+```
+
 ## API
 
 ### `formatSource(source, optionsOrAbsolutePath)`
