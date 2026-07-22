@@ -1,0 +1,5 @@
+{
+  // Dotted JSONC is a supported Biome configuration name.
+  "formatter": { "indentStyle": "space", "indentWidth": 2 },
+  "javascript": { "formatter": { "quoteStyle": "single" } }
+}

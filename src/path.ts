@@ -2,6 +2,10 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
 
 import { FormatterResolutionError } from "./errors.ts";
+import {
+  formatterProjectMarkerNames,
+  packageYamlHasPrettier,
+} from "./config-names.ts";
 import { parseJsonc } from "./fs.ts";
 
 export interface NormalizedPaths {
@@ -26,8 +30,6 @@ const workspaceMarkers = new Set([
 
 const projectMarkers = new Set([
   "package.json",
-  "deno.json",
-  "deno.jsonc",
   "jsr.json",
   "jsr.jsonc",
   "package-lock.json",
@@ -36,25 +38,7 @@ const projectMarkers = new Set([
   "bun.lock",
   "bun.lockb",
   "deno.lock",
-  "biome.json",
-  "biome.jsonc",
-  ".prettierrc",
-  ".prettierrc.json",
-  ".prettierrc.json5",
-  ".prettierrc.yaml",
-  ".prettierrc.yml",
-  ".prettierrc.js",
-  ".prettierrc.cjs",
-  ".prettierrc.mjs",
-  ".prettierrc.ts",
-  ".prettierrc.cts",
-  ".prettierrc.mts",
-  "prettier.config.js",
-  "prettier.config.cjs",
-  "prettier.config.mjs",
-  "prettier.config.ts",
-  "prettier.config.cts",
-  "prettier.config.mts",
+  ...formatterProjectMarkerNames,
 ]);
 
 export async function normalizePaths(
@@ -221,7 +205,8 @@ function cacheDetectedRoot(
   return detected;
 }
 
-async function inspectProjectMarkers(
+/** @internal Inspect one directory while inferring a project boundary. */
+export async function inspectProjectMarkers(
   directory: string,
 ): Promise<{ boundary: boolean; project: boolean }> {
   let entries: string[];
@@ -257,9 +242,12 @@ async function inspectProjectMarkers(
       }
     }
   }
+  const packageYamlProject = names.has("package.yaml") &&
+    await packageYamlHasPrettier(join(directory, "package.yaml"));
   return {
     boundary: workspace,
-    project: workspace || [...projectMarkers].some((name) => names.has(name)),
+    project: workspace || packageYamlProject ||
+      [...projectMarkers].some((name) => names.has(name)),
   };
 }
 

@@ -19,6 +19,7 @@ import {
   FormatterResolutionError,
   resolveFormatter,
 } from "./main.ts";
+import { inspectProjectMarkers } from "./src/path.ts";
 
 const root = Deno.cwd();
 const fixture = (...parts: string[]) =>
@@ -269,6 +270,102 @@ describe("resolveFormatter", () => {
     );
   });
 
+  it("discovers dotted Biome configuration names", async () => {
+    for (const directory of ["biome-json", "biome-jsonc"]) {
+      const configRoot = fixture("config-discovery", directory);
+      const resolution = await resolveFormatter({
+        filePath: join(configRoot, "src", "generated.ts"),
+        projectRoot: root,
+      });
+      assertEquals(resolution.formatter, "biome");
+      assertEquals(resolution.configRoot, configRoot);
+      assert(
+        resolution.evidence.some((item) =>
+          item.kind === "config" && item.path.startsWith(configRoot)
+        ),
+      );
+    }
+  });
+
+  it("discovers Prettier TOML and package.yaml configuration", async () => {
+    for (
+      const directory of [
+        "prettier-toml",
+        "package-yaml-object",
+        "package-yaml-string",
+      ]
+    ) {
+      const configRoot = fixture("config-discovery", directory);
+      const resolution = await resolveFormatter({
+        filePath: join(configRoot, "generated.ts"),
+        projectRoot: root,
+      });
+      assertEquals(resolution.formatter, "prettier");
+      assertEquals(resolution.configRoot, configRoot);
+    }
+  });
+
+  it("ignores unrelated, falsey, and malformed package.yaml metadata", async () => {
+    for (
+      const directory of [
+        "package-yaml-unrelated",
+        "package-yaml-false",
+        "package-yaml-malformed",
+      ]
+    ) {
+      const configRoot = fixture("config-discovery", directory);
+      const resolution = await resolveFormatter({
+        filePath: join(configRoot, "generated.ts"),
+        projectRoot: configRoot,
+      });
+      assertEquals(resolution.evidence, []);
+      assertEquals(resolution.status, "not-configured");
+    }
+  });
+
+  it("uses package metadata before standalone Prettier config", async () => {
+    const configRoot = fixture("config-discovery", "prettier-precedence");
+    const resolution = await resolveFormatter({
+      formatter: "prettier",
+      filePath: join(configRoot, "generated.ts"),
+      projectRoot: root,
+    });
+    assertEquals(resolution.configRoot, configRoot);
+    assertEquals(
+      resolution.evidence.filter((item) =>
+        item.formatter === "prettier" && item.strength === 30
+      ).map((item) => item.path),
+      [join(configRoot, "package.json"), join(configRoot, ".prettierrc")],
+    );
+  });
+
+  it("treats only truthy package.yaml Prettier metadata as a project marker", async () => {
+    const directory = await Deno.makeTempDir({
+      prefix: "projectfmt package yaml ",
+    });
+    try {
+      await Deno.writeTextFile(
+        join(directory, "package.yaml"),
+        "prettier:\n  singleQuote: true\n",
+      );
+      assertEquals(await inspectProjectMarkers(directory), {
+        boundary: false,
+        project: true,
+      });
+      await Deno.writeTextFile(
+        join(directory, "package.yaml"),
+        "prettier: false\n",
+      );
+      assertEquals(await inspectProjectMarkers(directory), {
+        boundary: false,
+        project: false,
+      });
+    } finally {
+      clearProjectRootCache();
+      await Deno.remove(directory, { recursive: true });
+    }
+  });
+
   it("uses deterministic precedence and reports equal-ranked ambiguity", async () => {
     const options = {
       filePath: "tests/fixtures/ambiguous/generated.ts",
@@ -329,6 +426,34 @@ describe("resolveFormatter", () => {
 });
 
 describe("formatSource", () => {
+  it("applies newly discovered formatter configuration forms", async () => {
+    for (const directory of ["biome-json", "biome-jsonc"]) {
+      assertEquals(
+        await formatSource('const value="configured"', {
+          filePath: `tests/fixtures/config-discovery/${directory}/generated.ts`,
+          projectRoot: root,
+        }),
+        "const value = 'configured';\n",
+      );
+    }
+    for (
+      const directory of [
+        "prettier-toml",
+        "package-yaml-object",
+        "package-yaml-string",
+        "prettier-precedence",
+      ]
+    ) {
+      assertEquals(
+        await formatSource('const value="configured"', {
+          filePath: `tests/fixtures/config-discovery/${directory}/generated.ts`,
+          projectRoot: root,
+        }),
+        "const value = 'configured';\n",
+      );
+    }
+  });
+
   it("does not load Prettier configuration above projectRoot", async () => {
     const parent = await Deno.makeTempDir({
       prefix: "projectfmt prettier boundary ",

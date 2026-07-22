@@ -1,13 +1,13 @@
 import { dirname, extname, relative, sep } from "node:path";
 
 import { parseJsonc, readTextIfPresent } from "../fs.ts";
+import { denoConfigNames } from "../config-names.ts";
 import { isExcluded, isIncluded } from "../glob.ts";
 import { nearestExistingDirectory } from "../path.ts";
 import { runCommand } from "../process.ts";
 import type { FormatterAdapter } from "../types.ts";
 import { configFileEvidence, packageEvidence } from "./discovery.ts";
 
-const configNames = ["deno.json", "deno.jsonc"] as const;
 type ExtensionDisposition = "canonical" | "alias" | "runtime-gated";
 
 interface DenoExtensionSpec {
@@ -104,7 +104,11 @@ export const denoAdapter: FormatterAdapter = {
   priority: 20,
 
   async discover(directory) {
-    const configs = await configFileEvidence("deno", directory, configNames);
+    const configs = await configFileEvidence(
+      "deno",
+      directory,
+      denoConfigNames,
+    );
     const configured: typeof configs = [];
     for (const evidence of configs) {
       const text = await readTextIfPresent(evidence.path);

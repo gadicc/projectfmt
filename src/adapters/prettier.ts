@@ -3,32 +3,17 @@ import { stat } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { resolveProjectPackage } from "../package.ts";
+import { prettierConfigNames } from "../config-names.ts";
 import type {
   AdapterContext,
   AdapterFormatResult,
   FormatterAdapter,
 } from "../types.ts";
-import { configFileEvidence, packageEvidence } from "./discovery.ts";
-
-const configNames = [
-  ".prettierrc",
-  ".prettierrc.json",
-  ".prettierrc.json5",
-  ".prettierrc.yaml",
-  ".prettierrc.yml",
-  ".prettierrc.js",
-  ".prettierrc.cjs",
-  ".prettierrc.mjs",
-  ".prettierrc.ts",
-  ".prettierrc.cts",
-  ".prettierrc.mts",
-  "prettier.config.js",
-  "prettier.config.cjs",
-  "prettier.config.mjs",
-  "prettier.config.ts",
-  "prettier.config.cts",
-  "prettier.config.mts",
-] as const;
+import {
+  configFileEvidence,
+  packageEvidence,
+  prettierPackageYamlEvidence,
+} from "./discovery.ts";
 
 interface PrettierModule {
   version?: string;
@@ -49,14 +34,17 @@ export const prettierAdapter: FormatterAdapter = {
   priority: 10,
 
   async discover(directory) {
+    const packageItems = await packageEvidence("prettier", directory, {
+      packageKey: "prettier",
+      packages: ["prettier"],
+      commandPattern:
+        /(?:^|[\s;&|])(?:npx\s+|pnpm\s+(?:exec\s+)?|yarn\s+|bunx\s+)?prettier(?:\s|$)/,
+    });
     return [
-      ...await configFileEvidence("prettier", directory, configNames),
-      ...await packageEvidence("prettier", directory, {
-        packageKey: "prettier",
-        packages: ["prettier"],
-        commandPattern:
-          /(?:^|[\s;&|])(?:npx\s+|pnpm\s+(?:exec\s+)?|yarn\s+|bunx\s+)?prettier(?:\s|$)/,
-      }),
+      ...packageItems.filter((item) => item.kind === "package-key"),
+      ...await prettierPackageYamlEvidence(directory),
+      ...await configFileEvidence("prettier", directory, prettierConfigNames),
+      ...packageItems.filter((item) => item.kind !== "package-key"),
     ];
   },
 

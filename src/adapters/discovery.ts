@@ -1,6 +1,7 @@
 import { basename, join } from "node:path";
 
 import { readJsoncIfPresent, readTextIfPresent } from "../fs.ts";
+import { packageYamlHasPrettier } from "../config-names.ts";
 import type { DiscoveryEvidence, FormatterName } from "../types.ts";
 
 export type DirectoryEvidence = Omit<DiscoveryEvidence, "distance">;
@@ -87,6 +88,21 @@ export async function packageEvidence(
     }
   }
   return evidence;
+}
+
+export async function prettierPackageYamlEvidence(
+  directory: string,
+): Promise<DirectoryEvidence[]> {
+  const path = join(directory, "package.yaml");
+  return await packageYamlHasPrettier(path)
+    ? [{
+      formatter: "prettier",
+      kind: "config",
+      path,
+      description: "package.yaml prettier key",
+      strength: 30,
+    }]
+    : [];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

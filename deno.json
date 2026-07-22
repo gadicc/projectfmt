@@ -22,7 +22,10 @@
     "typecheck": "deno check main.ts"
   },
   "fmt": {
-    "exclude": [".agents"]
+    "exclude": [
+      ".agents",
+      "tests/fixtures/config-discovery/package-yaml-malformed/package.yaml"
+    ]
   },
   "imports": {
     "@deno/dnt": "jsr:@deno/dnt@^0.42.3",
@@ -30,6 +33,7 @@
     "@std/assert": "jsr:@std/assert@^1.0.19",
     "@std/testing": "jsr:@std/testing@^1.0.19",
     "@biomejs/biome": "npm:@biomejs/biome@^2.5.4",
+    "@std/yaml": "jsr:@std/yaml@^1.1.2",
     "conventional-changelog-conventionalcommits": "npm:conventional-changelog-conventionalcommits@^10.0.0",
     "prettier": "npm:prettier@^3.6.2",
     "semantic-release": "npm:semantic-release@^25.0.8"

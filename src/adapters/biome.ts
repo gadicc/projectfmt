@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 
 import { parseJsonc, readTextIfPresent } from "../fs.ts";
+import { biomeConfigNames } from "../config-names.ts";
 import { isIncluded } from "../glob.ts";
 import { resolveProjectPackage } from "../package.ts";
 import { type CommandResult, runCommand } from "../process.ts";
@@ -14,8 +15,6 @@ import type {
 } from "../types.ts";
 import { configFileEvidence, packageEvidence } from "./discovery.ts";
 
-const configNames = ["biome.json", "biome.jsonc"] as const;
-
 /** Built-in project-local Biome CLI adapter. */
 export const biomeAdapter: FormatterAdapter = {
   name: "biome",
@@ -23,7 +22,7 @@ export const biomeAdapter: FormatterAdapter = {
 
   async discover(directory) {
     return [
-      ...await configFileEvidence("biome", directory, configNames),
+      ...await configFileEvidence("biome", directory, biomeConfigNames),
       ...await packageEvidence("biome", directory, {
         packages: ["@biomejs/biome"],
         commandPattern:

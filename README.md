@@ -257,8 +257,10 @@ to and including `projectRoot`. It never searches above that boundary.
 1. The nearest directory containing formatter evidence wins. This establishes
    the nested-project/monorepo boundary.
 2. Within that directory, explicit configuration (`biome.json`, a Prettier
-   config or `package.json#prettier`, or `deno.json(c)#fmt`) beats a formatting
-   script, which beats dependency-only evidence.
+   config or package metadata, or `deno.json(c)#fmt`) beats a formatting script,
+   which beats dependency-only evidence. Discovery follows the native filename
+   sets, including dotted Biome JSON/JSONC, Prettier TOML, and truthy
+   `package.yaml#prettier` configuration.
 3. Equal-strength candidates use the stable precedence `biome`, then `deno`,
    then `prettier`. This is an explicit tie-breaker, not adapter import order.
    `strict: true` rejects the ambiguity instead.
