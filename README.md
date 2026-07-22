@@ -1,6 +1,10 @@
 # projectfmt
 
-> Format generated code the way its destination project expects.
+_Format generated code the way its destination project expects._
+
+Copyright (c) 2015 by Gadi Cohen. [MIT Licensed](/LICENSE.txt).
+
+## Quick Start
 
 `projectfmt` is a project-aware formatter broker for code generators and
 libraries. Give it source text, the path where that source is intended to live,
