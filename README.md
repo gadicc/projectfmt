@@ -21,9 +21,21 @@ and either an explicit project boundary or an absolute path from which one can
 be inferred. It discovers and invokes the formatter already chosen by that
 project—without writing a temporary file.
 
+Deno / JSR import:
+
+```ts
+import { formatSource } from "@gadicc/projectfmt";
+```
+
+Node / npm import:
+
 ```ts
 import { formatSource } from "projectfmt";
+```
 
+The call is the same in either runtime:
+
+```ts
 const formatted = await formatSource(generatedSource, {
   filePath: "src/generated/schema.ts",
   projectRoot,
@@ -219,9 +231,21 @@ cached.
 
 Additional adapters use the same discovery/probe/format lifecycle as built-ins:
 
+Deno / JSR import:
+
+```ts
+import type { FormatterAdapter } from "@gadicc/projectfmt";
+```
+
+Node / npm import:
+
 ```ts
 import type { FormatterAdapter } from "projectfmt";
+```
 
+The adapter definition is runtime-neutral:
+
+```ts
 const custom: FormatterAdapter = {
   name: "companyfmt",
   priority: 100,
