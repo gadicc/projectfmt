@@ -61,6 +61,8 @@ export interface AdapterContext {
   evidence: readonly DiscoveryEvidence[];
   /** Whether the adapter must restrict processing to formatting. */
   formatOnly?: boolean;
+  /** Successful probe snapshot supplied only to format in the same call. */
+  availability?: AdapterAvailability;
 }
 
 /** In-memory output returned by an adapter. */

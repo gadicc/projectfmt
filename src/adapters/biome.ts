@@ -54,7 +54,8 @@ export const biomeAdapter: FormatterAdapter = {
   },
 
   async format(source, context) {
-    const implementation = resolveBiome(context);
+    const implementation = context.availability?.implementation ??
+      resolveBiome(context);
     if (!implementation) {
       throw new Error("Could not resolve a project-local @biomejs/biome CLI");
     }

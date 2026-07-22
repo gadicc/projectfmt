@@ -28,7 +28,7 @@ they do not authorize production feature delivery.
 | [011](011-canonicalize-symlinked-roots.md)      | Canonicalize symlinked package boundaries          | P2       | M      | 001                     | DONE   |
 | [012](012-parse-jsonc-safely.md)                | Preserve strings while parsing JSONC               | P2       | S      | —                       | DONE   |
 | [013](013-validate-custom-adapters.md)          | Validate and wrap custom-adapter lifecycles        | P2       | M      | 001, 002                | DONE   |
-| [014](014-remove-per-call-duplication.md)       | Remove duplicate work inside one operation         | P2       | M      | 004, 005, 006, 007, 013 | TODO   |
+| [014](014-remove-per-call-duplication.md)       | Remove duplicate work inside one operation         | P2       | M      | 004, 005, 006, 007, 013 | DONE   |
 | [015](015-spike-next-adapter.md)                | Choose the next built-in adapter by evidence       | P3       | M      | 005, 006, 007           | TODO   |
 | [016](016-design-explain-cli.md)                | Design a built-in explain-only diagnostic CLI      | P3       | M      | 001, 002, 004, 006, 013 | TODO   |
 | [017](017-design-batch-api.md)                  | Design a batch API for code generators             | P3       | M      | 014                     | TODO   |

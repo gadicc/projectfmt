@@ -224,8 +224,17 @@ const resolution = await resolveFormatter(absoluteOutputPath);
 ### `clearProjectRootCache()`
 
 Clears roots cached by automatic inference. Explicit `projectRoot` calls do not
-use this cache. Formatter evidence, configuration, and availability are not
-cached.
+use this cache. Each separate public call performs fresh formatter discovery and
+availability probing; formatter evidence, configuration, and availability are
+not cached across calls.
+
+Within one formatting call, projectfmt keeps the selected adapter map and
+snapshots the successful probe result through formatting. Prettier and Biome
+therefore use the package implementation path selected by that call instead of
+resolving it a second time. Repointing or removing a package after probing does
+not select a replacement for the current call; failure to load or invoke the
+snapshotted path is reported as a `FormatterExecutionError`. A later public call
+discovers and probes again.
 
 ### Custom adapters
 

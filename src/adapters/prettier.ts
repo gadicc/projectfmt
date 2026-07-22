@@ -73,7 +73,8 @@ export const prettierAdapter: FormatterAdapter = {
   },
 
   async format(source, context): Promise<AdapterFormatResult> {
-    const implementation = resolvePrettier(context);
+    const implementation = context.availability?.implementation ??
+      resolvePrettier(context);
     if (!implementation) {
       throw new Error("Could not resolve a project-local prettier package");
     }
