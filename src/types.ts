@@ -57,11 +57,13 @@ export interface AdapterContext {
   configRoot: string;
   /** All evidence discovered within projectRoot, nearest first. */
   evidence: readonly DiscoveryEvidence[];
+  /** Whether the adapter must restrict processing to formatting. */
+  formatOnly?: boolean;
 }
 
 /** In-memory output returned by an adapter. */
 export interface AdapterFormatResult {
-  /** Formatted or unchanged source text. */
+  /** Processed or unchanged source text. */
   source: string;
   /** Whether the intended path matched a formatter ignore rule. */
   ignored?: boolean;
@@ -82,7 +84,7 @@ export interface FormatterAdapter {
   ): Promise<readonly Omit<DiscoveryEvidence, "distance">[]>;
   /** Locate a usable implementation without installing anything. */
   probe(context: AdapterContext): Promise<AdapterAvailability>;
-  /** Format only. Adapters must not lint, fix, or organize imports. */
+  /** Process source according to the adapter's documented behavior. */
   format(source: string, context: AdapterContext): Promise<AdapterFormatResult>;
 }
 
@@ -138,13 +140,15 @@ export interface FormatSourceOptions {
   strict?: boolean;
   /** Additional adapters. Names must be unique. */
   adapters?: readonly FormatterAdapter[];
+  /** Restrict the selected adapter to formatting. Defaults to false. */
+  formatOnly?: boolean;
 }
 
 /** Formatted text plus change, ignore, and resolution diagnostics. */
 export interface FormatSourceResult {
-  /** Formatted or unchanged source. */
+  /** Processed or unchanged source. */
   source: string;
-  /** Whether formatting changed the source string. */
+  /** Whether processing changed the source string. */
   changed: boolean;
   /** Whether the formatter's ignore rules matched the intended path. */
   ignored: boolean;

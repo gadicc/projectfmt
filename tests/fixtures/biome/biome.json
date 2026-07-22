@@ -1,6 +1,7 @@
 {
   "formatter": {
     "enabled": true,
+    "includes": ["**", "!src/lint-only/**"],
     "indentStyle": "space",
     "indentWidth": 4
   },
@@ -14,8 +15,24 @@
   },
   "linter": {
     "enabled": true,
+    "includes": ["**"],
     "rules": {
-      "recommended": true
+      "recommended": false,
+      "style": {
+        "noInferrableTypes": "on",
+        "noNonNullAssertion": "on",
+        "useConst": "off"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "includes": ["**", "!src/lint-only/**"],
+    "actions": {
+      "recommended": false,
+      "source": {
+        "organizeImports": "on"
+      }
     }
   }
 }

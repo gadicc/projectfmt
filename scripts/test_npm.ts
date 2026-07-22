@@ -102,12 +102,12 @@ const prettier = await formatSource('const value="node"', {
   projectRoot,
 });
 if (prettier !== "const value = 'node'\\n") throw new Error("Prettier mismatch");
-const biome = await formatSource('const value="node"', {
+const biome = await formatSource('let value: number="node"', {
   formatter: "biome",
   filePath: "tests/fixtures/biome/node-smoke.ts",
   projectRoot,
 });
-if (!biome.includes("const value = 'node';")) throw new Error("Biome mismatch");
+if (biome !== "let value = 'node';\\n") throw new Error("Biome mismatch");
 const deno = await formatSource('{"runtime":"node"}', {
   formatter: "deno",
   filePath: "tests/fixtures/deno/node-smoke.json",

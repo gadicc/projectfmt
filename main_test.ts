@@ -185,20 +185,73 @@ describe("formatSource", () => {
     assertEquals(result.ignored, true);
   });
 
-  it("runs Biome formatting only with the intended path", async () => {
+  it("applies Biome formatting and safe lint fixes by default", async () => {
     const output = await formatSource(
-      'function value(){const unused="hello";return {unused}}',
+      "let value: number=1;console.log(value)",
       {
         formatter: "biome",
         filePath: "tests/fixtures/biome/src/generated/schema.ts",
         projectRoot: root,
       },
     );
-    assertStringIncludes(output, "    const unused = 'hello';");
-    // The configured linter is enabled, but formatting must not remove or fix it.
-    assertStringIncludes(output, "unused");
+    assertEquals(output, "let value = 1;\nconsole.log(value);\n");
+  });
 
+  it("applies configured Biome import organization by default", async () => {
+    const output = await formatSource(
+      'import { z } from "z";import { a } from "a";console.log(z,a)',
+      {
+        formatter: "biome",
+        filePath: "tests/fixtures/biome/src/generated/imports.ts",
+        projectRoot: root,
+      },
+    );
+    assertEquals(
+      output,
+      "import { a } from 'a';\nimport { z } from 'z';\nconsole.log(z, a);\n",
+    );
+  });
+
+  it("does not apply Biome rules disabled by repository configuration", async () => {
+    const output = await formatSource("let value=1;console.log(value)", {
+      formatter: "biome",
+      filePath: "tests/fixtures/biome/src/generated/disabled-rule.ts",
+      projectRoot: root,
+    });
+    assertEquals(output, "let value = 1;\nconsole.log(value);\n");
+  });
+
+  it("does not enable unsafe Biome lint fixes", async () => {
+    const output = await formatSource(
+      "interface Example{property?:string}\ndeclare const example: Example;\nconsole.log(example.property!.length)",
+      {
+        formatter: "biome",
+        filePath: "tests/fixtures/biome/src/generated/rules.ts",
+        projectRoot: root,
+      },
+    );
+    assertStringIncludes(output, "example.property!.length");
+  });
+
+  it("supports Biome formatting-only as an opt-out", async () => {
+    const output = await formatSource(
+      'import { z } from "z";import { a } from "a";let value: number=1;console.log(z,a,value)',
+      {
+        formatter: "biome",
+        filePath: "tests/fixtures/biome/src/generated/format-only.ts",
+        projectRoot: root,
+        formatOnly: true,
+      },
+    );
+    assertEquals(
+      output,
+      "import { z } from 'z';\nimport { a } from 'a';\nlet value: number = 1;\nconsole.log(z, a, value);\n",
+    );
+  });
+
+  it("honors Biome file includes for virtual intended paths", async () => {
     const source = "const     untouched=1";
+
     const ignored = await formatSourceWithResult(source, {
       formatter: "biome",
       filePath: "tests/fixtures/biome/src/generated/ignored.ts",
@@ -206,6 +259,26 @@ describe("formatSource", () => {
     });
     assertEquals(ignored.source, source);
     assertEquals(ignored.ignored, true);
+  });
+
+  it("honors operation-specific Biome includes", async () => {
+    const source = "let     value: number=1;console.log(value)";
+    const linted = await formatSourceWithResult(source, {
+      formatter: "biome",
+      filePath: "tests/fixtures/biome/src/lint-only/rule.ts",
+      projectRoot: root,
+    });
+    assertEquals(linted.source, "let     value=1;console.log(value)");
+    assertEquals(linted.ignored, false);
+
+    const formatOnly = await formatSourceWithResult(source, {
+      formatter: "biome",
+      filePath: "tests/fixtures/biome/src/lint-only/rule.ts",
+      projectRoot: root,
+      formatOnly: true,
+    });
+    assertEquals(formatOnly.source, source);
+    assertEquals(formatOnly.ignored, true);
   });
 
   it("runs Deno fmt with configuration and intended JSON file type", async () => {

@@ -51,19 +51,29 @@ export const biomeAdapter: FormatterAdapter = {
     if (!implementation) {
       throw new Error("Could not resolve a project-local @biomejs/biome CLI");
     }
-    if (await isIgnored(context)) return { source, ignored: true };
-    const result = await runCommand(
-      implementation,
-      ["format", "--stdin-file-path", context.filePath],
-      { cwd: context.configRoot, input: source },
-    );
-    if (result.code !== 0 || result.signal) {
-      const error = new Error(
-        `Biome exited ${result.signal ?? result.code ?? "without a status"}`,
-      ) as Error & { stderr?: string };
-      error.stderr = result.stderr;
-      throw error;
+    const fileBehavior = await biomeFileBehavior(context);
+    if (fileBehavior.ignored) return { source, ignored: true };
+    if (!context.formatOnly && fileBehavior.formatterActive) {
+      // Biome's stdin check --write currently succeeds silently on parse
+      // errors. Validate in memory first, but let check process the original
+      // source so its fix/format ordering remains authoritative.
+      await runBiome(
+        implementation,
+        ["format", "--stdin-file-path", context.filePath],
+        context,
+        source,
+      );
     }
+    const args = context.formatOnly
+      ? ["format", "--stdin-file-path", context.filePath]
+      : [
+        "check",
+        "--write",
+        ...fileBehavior.disabledChecks,
+        "--stdin-file-path",
+        context.filePath,
+      ];
+    const result = await runBiome(implementation, args, context, source);
     return {
       source: result.stdout || source,
       ignored: isIgnoredMessage(result.stderr),
@@ -71,6 +81,26 @@ export const biomeAdapter: FormatterAdapter = {
     };
   },
 };
+
+async function runBiome(
+  implementation: string,
+  args: readonly string[],
+  context: AdapterContext,
+  input: string,
+) {
+  const result = await runCommand(implementation, args, {
+    cwd: context.configRoot,
+    input,
+  });
+  if (result.code !== 0 || result.signal) {
+    const error = new Error(
+      `Biome exited ${result.signal ?? result.code ?? "without a status"}`,
+    ) as Error & { stderr?: string };
+    error.stderr = result.stderr;
+    throw error;
+  }
+  return result;
+}
 
 function resolveBiome(context: AdapterContext): string | null {
   const shim = resolveProjectPackage(
@@ -125,22 +155,58 @@ function isIgnoredMessage(stderr: string): boolean {
   return /(?:ignored|no files were processed)/i.test(stderr);
 }
 
-async function isIgnored(context: AdapterContext): Promise<boolean> {
+async function biomeFileBehavior(
+  context: AdapterContext,
+): Promise<{
+  ignored: boolean;
+  formatterActive: boolean;
+  disabledChecks: string[];
+}> {
   const configPath = context.evidence.find((item) =>
     item.formatter === "biome" && item.kind === "config"
   )?.path;
-  if (!configPath) return false;
+  if (!configPath) {
+    return { ignored: false, formatterActive: true, disabledChecks: [] };
+  }
   const text = await readTextIfPresent(configPath);
-  if (text === null) return false;
+  if (text === null) {
+    return { ignored: false, formatterActive: true, disabledChecks: [] };
+  }
   const config = parseJsonc(text) as Record<string, unknown>;
   const files = record(config.files);
-  const formatter = record(config.formatter);
-  if (formatter.enabled === false) return true;
   const path = relative(dirname(configPath), context.filePath).split(sep).join(
     "/",
   );
-  return !isIncluded(strings(files.includes), path) ||
-    !isIncluded(strings(formatter.includes), path);
+  if (!isIncluded(strings(files.includes), path)) {
+    return { ignored: true, formatterActive: false, disabledChecks: [] };
+  }
+
+  const tools = ["formatter", "linter", "assist"] as const;
+  const active = Object.fromEntries(tools.map((tool) => {
+    const options = record(config[tool]);
+    return [
+      tool,
+      options.enabled !== false && isIncluded(strings(options.includes), path),
+    ];
+  })) as Record<(typeof tools)[number], boolean>;
+
+  if (context.formatOnly) {
+    return {
+      ignored: !active.formatter,
+      formatterActive: active.formatter,
+      disabledChecks: [],
+    };
+  }
+  if (!tools.some((tool) => active[tool])) {
+    return { ignored: true, formatterActive: false, disabledChecks: [] };
+  }
+  return {
+    ignored: false,
+    formatterActive: active.formatter,
+    disabledChecks: tools.flatMap((tool) =>
+      active[tool] ? [] : [`--${tool}-enabled=false`]
+    ),
+  };
 }
 
 function record(value: unknown): Record<string, unknown> {

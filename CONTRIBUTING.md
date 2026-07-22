@@ -27,8 +27,9 @@ test is specifically about extension points.
 ## Changes
 
 - Keep the main API source-string and intended-filepath first.
-- Preserve the format-only contract; lint fixes and import organization require
-  separate, explicitly named future operations.
+- Keep Prettier and Deno format-only. Biome should mirror configured
+  `check --write` behavior without unsafe fixes and retain its explicit generic
+  formatting-only opt-out.
 - Treat project-local configuration, plugins, and binaries as trusted code and
   retain structured causes/stderr in failures.
 - Use named ESM exports and keep Deno and Node behavior aligned.

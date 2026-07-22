@@ -212,7 +212,7 @@ export async function formatSourceWithResult(
       },
     );
   }
-  const context = adapterContext(resolution);
+  const context = adapterContext(resolution, options);
   try {
     const formatted = await adapter.format(source, context);
     return {
@@ -365,11 +365,15 @@ function baseResolution(
   return resolution;
 }
 
-function adapterContext(resolution: FormatterResolution): AdapterContext {
+function adapterContext(
+  resolution: FormatterResolution,
+  options: FormatSourceOptions,
+): AdapterContext {
   return {
     filePath: resolution.filePath,
     projectRoot: resolution.projectRoot,
     configRoot: resolution.configRoot!,
     evidence: resolution.evidence,
+    formatOnly: options.formatOnly,
   };
 }

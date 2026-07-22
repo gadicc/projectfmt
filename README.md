@@ -96,9 +96,25 @@ const output = await formatSource("export const answer=42", {
 escape the project boundary are rejected. `projectRoot` defaults to the current
 working directory. `strict` defaults to `false`.
 
-Formatting is the only operation. The Biome adapter calls `biome format`, not
-`biome check`; no adapter applies lint fixes, organizes imports, or performs
-other semantic cleanup.
+Biome automatically runs the equivalent of
+`biome check --write --stdin-file-path=...`. This applies the repository's
+formatting, safe lint fixes, and enabled assist actions such as import
+organization. It never passes `--unsafe`. Set `formatOnly: true` to opt out of
+lint fixes and assist actions and call the equivalent of `biome format` instead:
+
+```ts
+await formatSource(source, {
+  filePath,
+  projectRoot,
+  formatOnly: true,
+});
+```
+
+`formatOnly` is an adapter-independent processing constraint. Prettier and Deno
+already perform formatting only, so Biome is the only built-in adapter whose
+behavior currently changes. Custom adapters receive the constraint as
+`context.formatOnly` and should avoid lint fixes, assists, or other cleanup when
+it is true.
 
 ### `formatSourceWithResult(source, options)`
 
@@ -171,8 +187,8 @@ await formatSource(source, {
 });
 ```
 
-Adapter names must be unique. Custom adapters must obey the same format-only
-contract.
+Adapter names must be unique. Custom adapters define their own source-processing
+behavior.
 
 ## Resolution rules
 
@@ -201,11 +217,11 @@ unchanged in either mode.
 
 ## Formatter behavior
 
-| Formatter | Implementation                    | Project/path behavior                                                                                                                                            | Deno | Node                        |
-| --------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------- |
-| Prettier  | Project-local JS API              | Passes `filepath`, resolves nearest config and EditorConfig, loads project plugins, checks `.prettierignore`/`.gitignore`                                        | Yes  | Yes                         |
-| Biome     | Project-local platform CLI binary | Runs only `format --stdin-file-path`; honors `files.includes` and `formatter.includes` for the virtual path                                                      | Yes  | Yes                         |
-| Deno fmt  | `deno fmt` subprocess             | Passes the nearest config, infers `--ext` from the intended path, honors `fmt.include`/`fmt.exclude`, and uses the nearest existing destination directory as cwd | Yes  | Yes, when Deno is installed |
+| Formatter | Implementation                    | Project/path behavior                                                                                                                                                                       | Deno | Node                        |
+| --------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------- |
+| Prettier  | Project-local JS API              | Passes `filepath`, resolves nearest config and EditorConfig, loads project plugins, checks `.prettierignore`/`.gitignore`                                                                   | Yes  | Yes                         |
+| Biome     | Project-local platform CLI binary | Runs `check --write --stdin-file-path` by default; uses repository formatting, safe lint rules, assists, and file/tool includes. `formatOnly` selects `format` and formatter includes only. | Yes  | Yes                         |
+| Deno fmt  | `deno fmt` subprocess             | Passes the nearest config, infers `--ext` from the intended path, honors `fmt.include`/`fmt.exclude`, and uses the nearest existing destination directory as cwd                            | Yes  | Yes, when Deno is installed |
 
 No temporary file is required by any adapter. Paths containing spaces are passed
 as process arguments rather than shell strings.
@@ -245,17 +261,16 @@ Compared with the formatter subsystem extracted from `valibot-serialize`:
   plugins;
 - Deno fmt receives the real extension, project cwd, and config rather than
   always parsing stdin as TypeScript;
-- Biome is format-only in both runtimes; the old Deno path also applied safe
-  lint fixes;
+- Biome consistently applies configured formatting, safe lint fixes, and assist
+  actions in both runtimes, with a formatting-only opt-out;
 - Node and Deno share one resolution/error contract;
 - diagnostics, strict mode, custom adapters, ignored virtual files, and project
   boundary validation are public behavior.
 
 ## Roadmap
 
-V1 is intentionally formatting-only. Likely future adapters include dprint and
-oxfmt, followed by explicitly named operations for any non-formatting behavior.
-A whole-repository formatting CLI is not the primary goal.
+Likely future adapters include dprint and oxfmt. A whole-repository formatting
+CLI is not the primary goal.
 
 ## Development
 
