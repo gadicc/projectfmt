@@ -23,8 +23,12 @@ jobs:
         run: deno task check:ci
       - name: Validate JSR and npm artifacts
         run: deno task test:packages
-      - uses: codecov/codecov-action@v7
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
         with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: ./coverage.lcov
           use_oidc: true
 
   platforms:

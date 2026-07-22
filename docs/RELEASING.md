@@ -14,7 +14,10 @@ Deno-to-npm artifact as `projectfmt`, and a GitHub release.
    publisher with user `gadicc`, repository `projectfmt`, workflow filename
    `release.yml`, and the `npm publish` allowed action. Keep the repository and
    package public so npm can attach provenance.
-4. Protect `main` and require the Tests workflow.
+4. Install the Codecov GitHub App for `gadicc/projectfmt` and enable the
+   repository in Codecov. Coverage uploads authenticate with GitHub OIDC, so do
+   not create a `CODECOV_TOKEN` secret.
+5. Protect `main` and require the Tests workflow.
 
 No long-lived npm or JSR token is expected. GitHub's generated `GITHUB_TOKEN` is
 used for release notes, comments, and the GitHub release.
